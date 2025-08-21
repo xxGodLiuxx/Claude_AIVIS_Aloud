@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude AIVIS Aloud v1.0.0
-Real-time text-to-speech for Claude Code responses
+Claude AIVIS Aloud v1.1.0
+Bug fixes for numbering lists, time format, and uppercase letters
 Volume: Normal 1.0, Thinking 0.5
-Natural Japanese reading with list and bracket handling
+Natural Japanese reading with enhanced text processing
 """
 
 import json
@@ -32,7 +32,7 @@ if sys.platform == 'win32':
 # Log settings
 log_dir = Path(__file__).parent / "logs" / "aloud"
 log_dir.mkdir(parents=True, exist_ok=True)
-log_file = log_dir / f"claude_aivis_aloud_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+log_file = log_dir / f"kanon_aloud_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,7 +42,7 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-logger = logging.getLogger('claude_aivis')
+logger = logging.getLogger('kanon')
 
 # ===============================
 # Global variables and settings
@@ -85,7 +85,7 @@ def cleanup_old_logs(retention_days=7):
         current_time = time.time()
         
         # Find and delete old log files
-        for log_file in log_dir.glob("claude_aivis_aloud_*.log"):
+        for log_file in log_dir.glob("kanon_aloud_*.log"):
             try:
                 file_time = os.path.getmtime(log_file)
                 age_days = (current_time - file_time) / (24 * 3600)
@@ -416,11 +416,12 @@ def process_text_for_narration(text):
     text = re.sub(r'[#]{2,}', '', text)
     text = re.sub(r'[\*]{2,}', '', text)
     
-    # Process bullet points and numbering lists (v3.1.5: improved)
+    # Process bullet points and numbering lists (v3.1.6: fixed)
     # Remove bullet markers
     text = re.sub(r'^- (.+?)$', r'\1', text, flags=re.MULTILINE)
     # Convert numbered lists to natural reading format (1. -> 1、)
-    text = re.sub(r'^(\d+)\. (.+?)$', r'\1、\2', text, flags=re.MULTILINE)
+    # v3.1.6: More flexible pattern that works with indents and inline
+    text = re.sub(r'(\d+)\.(\s*)', r'\1、', text)
     
     # Improved line break processing
     # Double line breaks become single periods (paragraph breaks)
@@ -434,10 +435,39 @@ def process_text_for_narration(text):
     text = re.sub(r'[「『]', '。', text)
     text = re.sub(r'[」』]', '。', text)
     
+    # v3.1.6: Process datetime formats for natural reading
+    # SESSION_YYYYMMDD_HHMMSS_NNNNNN format
+    text = re.sub(
+        r'SESSION_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})_\d+',
+        lambda m: f'セッション {int(m.group(1))}年{int(m.group(2))}月{int(m.group(3))}日 {int(m.group(4))}時{int(m.group(5))}分{int(m.group(6))}秒',
+        text
+    )
+    
+    # ISO format YYYY-MM-DDTHH:MM:SS
+    text = re.sub(
+        r'(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})',
+        lambda m: f'{int(m.group(1))}年{int(m.group(2))}月{int(m.group(3))}日 {int(m.group(4))}時{int(m.group(5))}分{int(m.group(6))}秒',
+        text
+    )
+    
+    # Normal datetime format YYYY-MM-DD HH:MM:SS
+    text = re.sub(
+        r'(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})',
+        lambda m: f'{int(m.group(1))}年{int(m.group(2))}月{int(m.group(3))}日 {int(m.group(4))}時{int(m.group(5))}分{int(m.group(6))}秒',
+        text
+    )
+    
+    # Time only HH:MM:SS
+    text = re.sub(
+        r'(\d{2}):(\d{2}):(\d{2})',
+        lambda m: f'{int(m.group(1))}時{int(m.group(2))}分{int(m.group(3))}秒',
+        text
+    )
+    
     # Convert technical terms to more natural Japanese
     replacements = {
-        # User name support (customize as needed)
-        # 'UserName': 'reading',
+        # v3.1.5: JaH support
+        'JaH': 'ジャー',
         'TODO': 'タスク',
         'API': 'エーピーアイ',
         'URL': 'アドレス',
@@ -465,13 +495,37 @@ def process_text_for_narration(text):
         'delete': '削除',
     }
     
-    # Apply replacements
+    # Apply replacements (v3.1.5: case-sensitive for JaH)
     for old, new in replacements.items():
-        # Case-sensitive replacement
-        text = text.replace(old, new)
+        if old == 'JaH':
+            # JaH is case-sensitive
+            text = text.replace(old, new)
         else:
             # Other terms are case-insensitive
             text = re.sub(rf'\b{old}\b', new, text, flags=re.IGNORECASE)
+    
+    # v3.1.6: Convert uppercase alphabet sequences to katakana
+    # This handles acronyms not in the dictionary
+    def convert_uppercase_to_katakana(match):
+        alphabet_dict = {
+            'A': 'エー', 'B': 'ビー', 'C': 'シー', 'D': 'ディー',
+            'E': 'イー', 'F': 'エフ', 'G': 'ジー', 'H': 'エイチ',
+            'I': 'アイ', 'J': 'ジェイ', 'K': 'ケー', 'L': 'エル',
+            'M': 'エム', 'N': 'エヌ', 'O': 'オー', 'P': 'ピー',
+            'Q': 'キュー', 'R': 'アール', 'S': 'エス', 'T': 'ティー',
+            'U': 'ユー', 'V': 'ブイ', 'W': 'ダブリュー', 'X': 'エックス',
+            'Y': 'ワイ', 'Z': 'ゼット'
+        }
+        result = ''
+        for char in match.group(0):
+            if char in alphabet_dict:
+                result += alphabet_dict[char]
+            else:
+                result += char
+        return result
+    
+    # Convert sequences of 2 or more uppercase letters
+    text = re.sub(r'\b[A-Z]{2,}\b', convert_uppercase_to_katakana, text)
     
     # Clean up consecutive punctuation
     text = re.sub(r'。+', '。', text)  # Multiple periods to single
@@ -545,9 +599,7 @@ def generate_message_id(data):
 def find_latest_jsonl():
     """Find the latest JSONL file"""
     patterns = [
-        # Example paths - customize based on your environment
-        # r"C:\Users\[USERNAME]\.claude\projects\**\*.jsonl",
-        # r"/home/[USERNAME]/.claude/projects/**/*.jsonl",
+        r"C:\Users\liuco\.claude\projects\**\*.jsonl",
         r"C:\Users\*\.claude\projects\**\*.jsonl"
     ]
     
