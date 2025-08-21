@@ -1,0 +1,17 @@
+# Claude AIVIS Aloud Requirements
+# Python 3.8+ required
+
+# Core dependencies
+requests>=2.31.0
+pygame>=2.5.0
+watchdog>=3.0.0
+
+# Optional but recommended
+urllib3>=2.0.0
+certifi>=2023.0.0
+charset-normalizer>=3.0.0
+
+# Development dependencies (optional)
+# pytest>=7.4.0
+# black>=23.0.0
+# pylint>=2.17.0

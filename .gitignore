@@ -1,0 +1,79 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+log_*.txt
+
+# Config with personal settings
+config.local.json
+settings.local.json
+*.backup
+
+# Audio files
+*.wav
+*.mp3
+*.ogg
+
+# Personal data
+personal/
+private/
+credentials.json
+secrets.json
+
+# Test files
+test_*.json
+*.test
+
+# Claude specific
+claude_sessions/
+session_states/
+*.jsonl
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache
+.cache/
+cache/
+__pycache__/

@@ -1,0 +1,43 @@
+{
+  "engine": {
+    "host": "localhost",
+    "port": 50021,
+    "timeout": 30,
+    "retry_count": 3
+  },
+  "voice": {
+    "speaker_id": 2001,
+    "speed": 1.0,
+    "pitch": 0,
+    "intonation": 1.0,
+    "normal_volume": 1.0,
+    "thinking_volume": 0.5,
+    "pre_phoneme_length": 0.1,
+    "post_phoneme_length": 0.1
+  },
+  "monitoring": {
+    "json_path": "",
+    "poll_interval": 0.1,
+    "max_retries": 3,
+    "encoding": "utf-8"
+  },
+  "audio": {
+    "sample_rate": 24000,
+    "channels": 1,
+    "buffer_size": 512
+  },
+  "logging": {
+    "enabled": true,
+    "level": "INFO",
+    "log_dir": "logs",
+    "max_file_size": "10MB",
+    "backup_count": 5
+  },
+  "features": {
+    "think_hard_detection": true,
+    "list_reading_optimization": true,
+    "bracket_handling": true,
+    "auto_cleanup_logs": true,
+    "duplicate_prevention": true
+  }
+}
