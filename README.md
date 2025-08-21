@@ -35,11 +35,14 @@ Claude AIVIS Aloudは、Claude Code CLI（コマンドラインインターフ�
 - メモリ: 2GB以上の空き容量
 - Claude Code CLI環境
 
-### AIVIS Speech Engineのインストール
+### AIVIS Speechのインストール
 
-1. [AIVIS Project公式サイト](https://aivis-project.com/)から最新版をダウンロード
+1. [AIVIS Project公式サイト](https://aivis-project.com/)からAIVIS Speechをダウンロード
+   - **重要**: GitHub版ではなく、必ず公式サイトからダウンロードしてください
+   - Windows版またはmacOS版を選択
 2. インストーラーを実行してセットアップ
-3. デフォルトポート（50021）でエンジンが起動することを確認
+3. 初回起動時にデフォルトの音声モデルが自動ダウンロードされます
+4. AIVIS Speech Engineがポート50021で自動起動することを確認
 
 ## インストール
 
@@ -81,25 +84,24 @@ python claude_aivis_aloud.py
 
 ## 話者IDのカスタマイズ
 
-AIVIS Speech Engineは複数の話者（ボイス）をサポートしています。
+AIVIS Speechは複数の話者（ボイス）をサポートしています。詳細な手順は`docs/VOICE_CUSTOMIZATION.md`を参照してください。
 
-### 利用可能な話者の確認
+### クイックスタート
 
-```python
-import requests
-response = requests.get("http://localhost:50021/speakers")
-speakers = response.json()
-for speaker in speakers:
-    print(f"ID: {speaker['id']}, Name: {speaker['name']}")
-```
+1. **話者一覧の確認**
+   ```bash
+   python examples/list_speakers.py
+   ```
 
-### 話者IDの変更
+2. **新しい話者の追加**
+   - [AivisHub](https://hub.aivis-project.com/)から話者モデルを選択
+   - 例: [花音](https://hub.aivis-project.com/aivm-models/a670e6b8-0852-45b2-8704-1bc9862f2fe6)
+   - AIVIS Speechの「音声合成モデル追加」メニューから追加
+   - 詳細手順: `examples/install_kanon.md`参照
 
-`config.json`の`speaker_id`を変更することで、お好みのボイスに切り替えできます：
-
-- 2001: 標準的な女性ボイス（デフォルト）
-- 2002: 落ち着いた女性ボイス
-- その他: AIVIS Speech Engineのドキュメントを参照
+3. **話者IDの設定**
+   - `config.json`の`speaker_id`に、確認したIDを設定
+   - 各話者のスタイル（ノーマル、ハッピー等）ごとに異なるIDがあります
 
 ## トラブルシューティング
 

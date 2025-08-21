@@ -1,0 +1,56 @@
+{
+  "engine": {
+    "host": "localhost",
+    "port": 50021,
+    "timeout": 30,
+    "retry_count": 3
+  },
+  "voice": {
+    // speaker_idは必ず list_speakers.py で確認した値を使用してください
+    // 以下は例です。実際のIDは環境により異なります
+    "speaker_id": 1325133120,  // 使用する話者のスタイルID
+    
+    // 音声パラメータ（調整可能）
+    "speed": 1.0,              // 話速: 0.5(遅い) ～ 2.0(速い)
+    "pitch": 0,                // 音高: -0.15(低い) ～ 0.15(高い)
+    "intonation": 1.0,         // 抑揚: 0(平坦) ～ 2.0(強い)
+    
+    // 音量設定
+    "normal_volume": 1.0,      // 通常メッセージの音量: 0 ～ 2.0
+    "thinking_volume": 0.5,    // Think Hard Mode時の音量: 0 ～ 2.0
+    
+    // 詳細設定（通常は変更不要）
+    "pre_phoneme_length": 0.1,   // 音素前の無音時間
+    "post_phoneme_length": 0.1   // 音素後の無音時間
+  },
+  "monitoring": {
+    // Claude Code CLIのJSONファイルパス
+    // 空の場合は自動検出を試みます
+    "json_path": "",
+    
+    // 監視設定
+    "poll_interval": 0.1,      // ファイル監視間隔（秒）
+    "max_retries": 3,          // 読み込み失敗時のリトライ回数
+    "encoding": "utf-8"        // ファイルエンコーディング
+  },
+  "audio": {
+    "sample_rate": 24000,      // サンプリングレート（Hz）
+    "channels": 1,             // チャンネル数（1: モノラル）
+    "buffer_size": 512         // オーディオバッファサイズ
+  },
+  "logging": {
+    "enabled": true,           // ログ記録の有効/無効
+    "level": "INFO",          // ログレベル: DEBUG, INFO, WARNING, ERROR
+    "log_dir": "logs",        // ログファイルの保存先
+    "max_file_size": "10MB",  // ログファイルの最大サイズ
+    "backup_count": 5         // 保持するログファイル数
+  },
+  "features": {
+    // 機能の有効/無効設定
+    "think_hard_detection": true,      // Think Hard Mode検出
+    "list_reading_optimization": true, // リスト読み上げ最適化
+    "bracket_handling": true,          // 括弧処理の最適化
+    "auto_cleanup_logs": true,         // 古いログの自動削除
+    "duplicate_prevention": true       // 重複読み上げ防止
+  }
+}

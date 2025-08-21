@@ -1,143 +1,286 @@
-# 話者IDカスタマイズガイド
+# 話者カスタマイズガイド
 
-## 概要
+このガイドでは、AIVIS Speech Engineの話者（音声）をカスタマイズする公式の手順を説明します。
 
-AIVIS Speech Engineは複数の話者（ボイス）をサポートしており、お好みの声質に変更することができます。
+## 📋 目次
 
-## 利用可能な話者の確認方法
+1. [基本概念](#基本概念)
+2. [現在の話者を確認](#現在の話者を確認)
+3. [新しい話者モデルの追加](#新しい話者モデルの追加)
+4. [話者IDの設定](#話者idの設定)
+5. [音声パラメータの調整](#音声パラメータの調整)
+6. [トラブルシューティング](#トラブルシューティング)
+
+## 基本概念
+
+### 話者IDについて
+
+AIVIS Speech Engineでは、各話者（音声モデル）は以下の識別子を持ちます：
+
+- **speaker_id**: 実際に使用する数値ID（例：1325133120）
+- **local_id**: 0-31の範囲の整数
+- **UUID**: モデル固有の識別子
+- **styles**: 各話者内の異なる話し方（ノーマル、ハッピー、サッド等）
+
+## 現在の話者を確認
 
 ### 方法1: Pythonスクリプトで確認
 
+以下のスクリプトを実行して、利用可能な話者の一覧を取得します：
+
 ```python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+list_speakers.py - AIVIS Speech Engine話者一覧取得ツール
+"""
+
 import requests
 import json
 
-# AIVIS Speech Engineが起動していることを確認してください
-engine_url = "http://localhost:50021"
-
-try:
-    response = requests.get(f"{engine_url}/speakers")
-    speakers = response.json()
+def list_available_speakers():
+    """利用可能な話者を一覧表示"""
     
-    print("利用可能な話者一覧:")
-    print("-" * 50)
+    # AIVIS Speech Engineのデフォルトポート
+    engine_url = "http://localhost:50021"
     
-    for speaker in speakers:
-        print(f"話者名: {speaker['name']}")
-        for style in speaker['styles']:
-            print(f"  スタイルID: {style['id']}")
-            print(f"  スタイル名: {style['name']}")
-        print()
+    try:
+        # 話者一覧を取得
+        response = requests.get(f"{engine_url}/speakers")
+        response.raise_for_status()
         
-except Exception as e:
-    print(f"エラー: {e}")
-    print("AIVIS Speech Engineが起動していることを確認してください")
+        speakers = response.json()
+        
+        print("=" * 60)
+        print("利用可能な話者一覧")
+        print("=" * 60)
+        
+        for speaker in speakers:
+            print(f"\n話者名: {speaker['name']}")
+            print(f"UUID: {speaker.get('speaker_uuid', 'N/A')}")
+            
+            # 各スタイルのIDを表示
+            if 'styles' in speaker:
+                print("利用可能なスタイル:")
+                for style in speaker['styles']:
+                    print(f"  - ID: {style['id']}")
+                    print(f"    スタイル名: {style['name']}")
+                    print(f"    ※ config.jsonのspeaker_idに {style['id']} を設定")
+            print("-" * 40)
+            
+    except requests.exceptions.ConnectionError:
+        print("エラー: AIVIS Speech Engineに接続できません")
+        print("以下を確認してください：")
+        print("1. AIVIS Speech Engineが起動している")
+        print("2. ポート50021で動作している")
+        
+    except Exception as e:
+        print(f"エラーが発生しました: {e}")
+
+if __name__ == "__main__":
+    list_available_speakers()
 ```
 
 ### 方法2: ブラウザで確認
 
-AIVIS Speech Engineが起動している状態で、以下のURLにアクセス：
+1. AIVIS Speech Engineを起動
+2. ブラウザで以下のURLにアクセス：
+   ```
+   http://localhost:50021/speakers
+   ```
+3. JSON形式で話者一覧が表示されます
+
+### 方法3: AIVIS Speech GUIから確認
+
+1. AIVIS Speechアプリケーションを起動
+2. 「音声」タブまたは設定から話者一覧を確認
+3. 各話者の横に表示されるIDをメモ
+
+## 新しい話者モデルの追加
+
+### ステップ1: モデルの入手
+
+1. **AivisHub**にアクセス
+   - URL: https://hub.aivis-project.com/
+   - 無料・有料の様々な音声モデルが公開されています
+
+2. お好みの話者モデルを探す
+   - ライセンスを確認（ACML、ACML-NC、CC0等）
+   - サンプル音声を聴いて選択
+
+3. `.aivmx`ファイルをダウンロード
+
+### ステップ2: モデルのインストール
+
+#### 🎯 推奨方法: AivisHubからインストール
+
+1. **AivisHubで話者を選択**
+   - [AivisHub](https://hub.aivis-project.com/)にアクセス
+   - お好みの話者を選択（例：[花音](https://hub.aivis-project.com/aivm-models/a670e6b8-0852-45b2-8704-1bc9862f2fe6)）
+   - URLをコピー
+
+2. **AIVIS Speechでインストール**
+   - AIVIS Speechアプリを起動
+   - 「音声合成モデル追加」メニューを選択
+   - コピーしたURLを入力
+   - 自動的にダウンロードとインストールが実行されます
+
+#### 別の方法A: ファイルからインストール
+
+1. AivisHubから`.aivmx`ファイルをダウンロード
+2. AIVIS Speechの「音声合成モデル追加」メニューを選択
+3. ダウンロードした`.aivmx`ファイルを選択
+4. 自動的にインストールされます
+
+#### 方法C: 手動インストール（上級者向け）
+
+1. ダウンロードした`.aivmx`ファイルを以下のフォルダに配置：
+   ```
+   Windows:
+   C:\Users\[ユーザー名]\AppData\Roaming\AivisSpeech-Engine\Models\
+   
+   macOS:
+   ~/Library/Application Support/AivisSpeech-Engine/Models/
+   ```
+
+2. AIVIS Speechを再起動
+
+#### 方法D: APIでインストール（開発者向け）
+
+```python
+import requests
+
+# モデルファイルのパス
+model_path = "path/to/model.aivmx"
+
+# APIエンドポイント
+url = "http://localhost:50021/aivm_models/install"
+
+# ファイルをアップロード
+with open(model_path, 'rb') as f:
+    files = {'file': f}
+    response = requests.post(url, files=files)
+    
+if response.status_code == 200:
+    print("モデルのインストールに成功しました")
+else:
+    print(f"エラー: {response.text}")
 ```
-http://localhost:50021/speakers
-```
 
-## 話者IDの変更方法
+### ステップ3: インストール確認
 
-### 1. config.jsonを編集
+前述の「現在の話者を確認」の方法で、新しい話者が追加されたことを確認します。
 
-`config.json`ファイルの`voice.speaker_id`を変更します：
+## 話者IDの設定
+
+### config.jsonでの設定
+
+1. `list_speakers.py`を実行して話者IDを確認
+2. `config.json`を編集：
 
 ```json
 {
   "voice": {
-    "speaker_id": 2001,  // ← この値を変更
-    ...
+    "speaker_id": 1325133120,  // ← ここに確認したIDを設定
+    "speed": 1.0,
+    "pitch": 0,
+    "intonation": 1.0,
+    "normal_volume": 1.0,
+    "thinking_volume": 0.5
   }
 }
 ```
 
-### 2. スクリプト内で直接指定
+### 重要な注意点
 
-```python
-# claude_aivis_aloud.py内で直接変更する場合
-SPEAKER_ID = 2001  # お好みの話者IDに変更
-```
-
-## 標準的な話者ID
-
-AIVIS Speech Engineのデフォルトインストールで利用可能な一般的な話者ID：
-
-| ID範囲 | 説明 | 特徴 |
-|--------|------|------|
-| 2001-2010 | 女性ボイス | 明るく親しみやすい声質 |
-| 2011-2020 | 女性ボイス | 落ち着いた声質 |
-| 2021-2030 | 男性ボイス | 低めの声質 |
-| 2031+ | その他 | 特殊なキャラクターボイス |
-
-※実際のIDは、インストールされているモデルによって異なります
+- **speaker_id**は各スタイルごとに異なります
+- 同じ話者でも「ノーマル」「ハッピー」などのスタイルで異なるIDになります
+- 必ず`/speakers`エンドポイントで正確なIDを確認してください
 
 ## 音声パラメータの調整
 
-話者IDの他に、以下のパラメータで音声をカスタマイズできます：
+### 基本パラメータ
 
-### config.json での設定
+| パラメータ | 説明 | 範囲 | デフォルト |
+|-----------|------|------|------------|
+| `speed` | 話速 | 0.5～2.0 | 1.0 |
+| `pitch` | 音高 | -0.15～0.15 | 0 |
+| `intonation` | 抑揚 | 0～2.0 | 1.0 |
+| `volume` | 音量 | 0～2.0 | 1.0 |
+
+### 設定例
 
 ```json
 {
   "voice": {
-    "speaker_id": 2001,
-    "speed": 1.0,         // 話速（0.5-2.0）
-    "pitch": 0,           // 音高（-0.15～0.15）
-    "intonation": 1.0,    // 抑揚（0-2.0）
-    "normal_volume": 1.0, // 通常音量（0-2.0）
-    "thinking_volume": 0.5 // 思考モード音量（0-2.0）
+    "speaker_id": 1325133120,
+    "speed": 1.2,           // 少し速め
+    "pitch": 0.05,          // 少し高め
+    "intonation": 1.3,      // 抑揚を強め
+    "normal_volume": 1.0,   // 通常の音量
+    "thinking_volume": 0.5  // 思考時は控えめ
   }
 }
 ```
 
-### パラメータ説明
-
-- **speed**: 話す速度。1.0が標準、0.5で半分の速度、2.0で2倍速
-- **pitch**: 声の高さ。0が標準、正の値で高く、負の値で低く
-- **intonation**: 抑揚の強さ。1.0が標準、値が大きいほど抑揚が強い
-- **volume**: 音量。1.0が標準、0.5で半分の音量
-
 ## トラブルシューティング
 
-### 話者が見つからない場合
+### 話者が見つからない
 
-1. AIVIS Speech Engineが起動していることを確認
-2. 正しいポート番号（デフォルト: 50021）を使用していることを確認
-3. 話者IDが正しいことを確認（利用可能な話者の確認方法を参照）
+**症状**: 設定したspeaker_idでエラーが発生
 
-### 音声が変わらない場合
+**解決方法**:
+1. `list_speakers.py`で利用可能なIDを再確認
+2. AIVIS Speech Engineが起動していることを確認
+3. モデルが正しくインストールされているか確認
 
-1. config.jsonの変更を保存したか確認
-2. スクリプトを再起動
-3. AIVIS Speech Engineのログを確認
+### 音声が再生されない
 
-## カスタムモデルの追加
+**症状**: エラーはないが音声が聞こえない
 
-AIVIS Speech Engineは、AIVMX形式のカスタムモデルをサポートしています。
+**解決方法**:
+1. システムの音量設定を確認
+2. AIVIS Speech Engineのログを確認
+3. 別の話者IDで試す
 
-### カスタムモデルの入手先
+### モデルのインストールに失敗
 
-- [AivisHub](https://aivis-hub.com/) - コミュニティ製モデル
-- [AIVIS Project公式](https://aivis-project.com/) - 公式モデル
+**症状**: .aivmxファイルが認識されない
 
-### インストール方法
+**解決方法**:
+1. ファイルが破損していないか確認
+2. 正しいフォルダに配置されているか確認
+3. AIVIS Speech Engineを完全に再起動
 
-1. .aivmxファイルをダウンロード
-2. AIVIS Speech Engineのモデルフォルダに配置
-3. エンジンを再起動
-4. 新しい話者IDを確認して使用
+### エンジンに接続できない
 
-## 注意事項
+**症状**: Connection refused エラー
 
-- 話者IDはモデルによって異なるため、必ず事前に確認してください
-- 一部のモデルは商用利用に制限がある場合があります
-- カスタムモデル使用時は、各モデルのライセンスを確認してください
+**解決方法**:
+1. AIVIS Speech Engineが起動しているか確認
+2. ポート50021が使用されていないか確認：
+   ```bash
+   # Windows
+   netstat -an | findstr :50021
+   
+   # Mac/Linux
+   lsof -i :50021
+   ```
+3. ファイアウォール設定を確認
 
-## サポート
+## 参考リンク
 
-話者カスタマイズに関する質問は、GitHubのIssuesでお気軽にお問い合わせください。
+- [AIVIS Project公式サイト](https://aivis-project.com/)
+- [AivisHub（モデル配布サイト）](https://hub.aivis-project.com/)
+- [AIVIS Speech Engine GitHub](https://github.com/Aivis-Project/AivisSpeech-Engine)
+- [API ドキュメント](https://aivis-project.github.io/AivisSpeech-Engine/api/)
+
+## ライセンスについて
+
+- 各音声モデルには個別のライセンスが設定されています
+- 商用利用の際は、各モデルのライセンスを必ず確認してください
+- AivisHubでダウンロード時にライセンス表示があります
+
+---
+
+最終更新: 2025年8月21日
