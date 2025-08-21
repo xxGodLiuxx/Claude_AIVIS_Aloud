@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude AIVIS Aloud v1.1.0
-Bug fixes for numbering lists, time format, and uppercase letters
+Claude AIVIS Aloud v1.2.0
+Enhanced Thinking mode with numbering list optimization
 Volume: Normal 1.0, Thinking 0.5
-Natural Japanese reading with enhanced text processing
+Natural Japanese reading with improved narration for both modes
 """
 
 import json
@@ -167,7 +167,7 @@ def speech_worker_simple():
     
     pygame.mixer.init(frequency=24000, size=-16, channels=1)
     
-    logger.info("[SpeechWorker] Simple worker started (v3.1.5)")
+    logger.info("[SpeechWorker] Simple worker started (v1.2.0)")
     
     while not _stop_flag.is_set():
         try:
@@ -368,16 +368,25 @@ def split_text_naturally(text, max_length=AIVIS_OPTIMAL_LENGTH):
     return chunks
 
 def process_thinking_for_narration(thinking_text):
-    """Convert thinking text for full narration without prefix"""
+    """Convert thinking text for full narration without prefix (v1.2.0: enhanced)"""
     # 思考内容を全文処理（要約なし、前置詞なし）
     text = thinking_text.strip()
+    
+    # v1.2.0: Convert numbered lists to natural reading format (1. -> 1、)
+    # This must be done before line break processing
+    text = re.sub(r'(\d+)\.(\s*)', r'\1、', text)
+    
+    # Remove bullet markers for cleaner reading
+    text = re.sub(r'^- (.+?)$', r'\1', text, flags=re.MULTILINE)
+    text = re.sub(r'^• (.+?)$', r'\1', text, flags=re.MULTILINE)
+    text = re.sub(r'^· (.+?)$', r'\1', text, flags=re.MULTILINE)
     
     # 基本的な変換処理
     text = re.sub(r'\n+', '、', text)
     text = re.sub(r'\s+', ' ', text)
     
-    # 文字化けや不要な文字を除去
-    text = re.sub(r'[^\w\s\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF、。！？]', '', text)
+    # 文字化けや不要な文字を除去（ただし数字は保持）
+    text = re.sub(r'[^\w\s\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF、。！？0-9]', '', text)
     
     # 空の場合はNoneを返す
     if not text.strip():
@@ -665,7 +674,7 @@ def monitor_and_speak():
     logger.info(f"[Monitor] Check interval: {CHECK_INTERVAL} seconds")
     logger.info(f"[Monitor] Auto session detection: ENABLED")
     logger.info("="*70)
-    logger.info("Kanon-Claude Aloud v3.1.5")
+    logger.info("Claude AIVIS Aloud v1.2.0")
     logger.info("Features:")
     logger.info("  - Simple FIFO queue (no priority system)")
     logger.info("  - No hook event processing")
@@ -831,7 +840,7 @@ def monitor_and_speak():
 def main():
     """Main entry point"""
     print("="*70)
-    print("Kanon-Claude Aloud v3.1.5")
+    print("Claude AIVIS Aloud v1.2.0")
     print("Simplified version without hooks and priority")
     print("="*70)
     

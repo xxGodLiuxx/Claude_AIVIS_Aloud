@@ -139,6 +139,22 @@ Technical Support: Claude (Anthropic)
 
 Please report issues and feature requests via [GitHub Issues](https://github.com/JaH/Claude_AIVIS_Aloud/issues).
 
+## Changelog
+
+- v1.2.0 (2025-08-21): Enhanced Thinking Mode
+  - Optimized numbering list processing in Thinking mode
+  - Improved bullet point narration
+  - Enhanced naturalness for number-containing text
+
+- v1.1.0 (2025-08-21): Bug Fix Release
+  - Improved processing for numbering lists, time formats, and uppercase letters
+  - Optimized normal mode narration
+
+- v1.0.0 (2025-08-21): Initial Release
+  - Real-time JSON file monitoring
+  - Think Hard Mode support (volume differentiation)
+  - Natural Japanese text-to-speech
+
 ---
 
 **Disclaimer**: This is an independently developed tool and is not affiliated with Anthropic or the AIVIS Project. Use at your own risk.
