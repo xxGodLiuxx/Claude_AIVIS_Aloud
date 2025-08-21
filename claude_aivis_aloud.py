@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude AIVIS Aloud v1.2.0
-Enhanced Thinking mode with numbering list optimization
+Claude AIVIS Aloud v1.3.0
+Real-time processing optimized version
 Volume: Normal 1.0, Thinking 0.5
-Natural Japanese reading with improved narration for both modes
+Based on v1.2.0 with improved real-time response and fixed message detection
 """
 
 import json
@@ -167,7 +167,7 @@ def speech_worker_simple():
     
     pygame.mixer.init(frequency=24000, size=-16, channels=1)
     
-    logger.info("[SpeechWorker] Simple worker started (v1.2.0)")
+    logger.info("[SpeechWorker] Simple worker started (v1.3.0)")
     
     while not _stop_flag.is_set():
         try:
@@ -625,10 +625,10 @@ def find_latest_jsonl():
     logger.info(f"Found JSONL: {latest}")
     return latest
 
-def skip_initial_messages(file_handle):
-    """Skip initial messages"""
+def skip_initial_messages(file_handle, skip_count=0):
+    """Skip initial messages (v1.3.0: configurable, default 0)"""
     skipped_count = 0
-    for _ in range(10):
+    for _ in range(skip_count):  # v1.3.0: Default 0 to avoid missing messages
         line = file_handle.readline()
         if not line:
             break
@@ -640,7 +640,8 @@ def skip_initial_messages(file_handle):
         except:
             pass
     
-    logger.info(f"[Monitor] Skipped {skipped_count} initial messages")
+    if skipped_count > 0:
+        logger.info(f"[Monitor] Skipped {skipped_count} initial messages")
     return skipped_count
 
 def monitor_and_speak():
@@ -674,7 +675,7 @@ def monitor_and_speak():
     logger.info(f"[Monitor] Check interval: {CHECK_INTERVAL} seconds")
     logger.info(f"[Monitor] Auto session detection: ENABLED")
     logger.info("="*70)
-    logger.info("Claude AIVIS Aloud v1.2.0")
+    logger.info("Claude AIVIS Aloud v1.3.0")
     logger.info("Features:")
     logger.info("  - Simple FIFO queue (no priority system)")
     logger.info("  - No hook event processing")
@@ -703,19 +704,15 @@ def monitor_and_speak():
                     current_file = latest_file
                     current_handle = open(current_file, 'r', encoding='utf-8', errors='ignore')
                     
-                    # 3. Set start position
-                    current_handle.seek(0, 2)
-                    file_size = current_handle.tell()
-                    start_pos = max(0, file_size - 10240)  # Last 10KB
-                    current_handle.seek(start_pos)
-                    current_handle.readline()  # Skip incomplete line
+                    # 3. Set start position (v1.3.0: start from end for real-time)
+                    current_handle.seek(0, 2)  # Move to end of file
                     
                     # 4. Clear processed message IDs
                     _processed_messages.clear()
                     logger.debug("Cleared processed message cache")
                     
-                    # 5. Skip initial messages
-                    skip_initial_messages(current_handle)
+                    # 5. Skip initial messages (v1.3.0: don't skip on session switch)
+                    # skip_initial_messages(current_handle)  # Disabled to avoid missing messages
                     
                     # 6. Voice notification with clear announcement
                     enqueue_speech_simple("新しいセッションが始まりました。", speed=NARRATION_SPEED_NORMAL, volume=VOLUME_NORMAL)
@@ -738,15 +735,11 @@ def monitor_and_speak():
             if not current_handle and current_file:
                 current_handle = open(current_file, 'r', encoding='utf-8', errors='ignore')
                 
-                # Set start position
-                current_handle.seek(0, 2)
-                file_size = current_handle.tell()
-                start_pos = max(0, file_size - 10240)  # Last 10KB
-                current_handle.seek(start_pos)
-                current_handle.readline()
+                # Set start position (v1.3.0: start from end for real-time)
+                current_handle.seek(0, 2)  # Move to end of file
                 
-                # Skip initial messages
-                skip_initial_messages(current_handle)
+                # Skip initial messages (v1.3.0: disabled to avoid missing messages)
+                # skip_initial_messages(current_handle)  # Disabled
                 
                 logger.info(f"[Monitor] Opened file: {os.path.basename(current_file)}")
             
@@ -840,7 +833,7 @@ def monitor_and_speak():
 def main():
     """Main entry point"""
     print("="*70)
-    print("Claude AIVIS Aloud v1.2.0")
+    print("Claude AIVIS Aloud v1.3.0")
     print("Simplified version without hooks and priority")
     print("="*70)
     
