@@ -48,7 +48,7 @@ Claude AIVIS Aloudは、Claude Code CLI（コマンドラインインターフ�
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/[your-username]/Claude_AIVIS_Aloud.git
+git clone https://github.com/JaH/Claude_AIVIS_Aloud.git
 cd Claude_AIVIS_Aloud
 
 # 依存関係のインストール
@@ -146,7 +146,7 @@ AIVIS Speechは複数の話者（ボイス）をサポートしています。�
 
 ## サポート
 
-問題報告やフィーチャーリクエストは[Issues](https://github.com/[your-username]/Claude_AIVIS_Aloud/issues)へお願いします。
+問題報告やフィーチャーリクエストは[Issues](https://github.com/JaH/Claude_AIVIS_Aloud/issues)へお願いします。
 
 ## 更新履歴
 
