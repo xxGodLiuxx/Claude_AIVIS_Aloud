@@ -6,7 +6,7 @@ Claude Codeの応答メッセージをAIVIS Speech Engineでリアルタイム�
 
 ### 🎉 新機能: Claude Code CLI完全対応
 - バックグラウンド常駐モード対応
-- スラッシュコマンド `/kanon` による簡単起動
+- スラッシュコマンド `/aloud` による簡単起動
 - グレースフルシャットダウン実装
 - 長期安定運用対応（24時間連続稼働可能）
 
@@ -74,17 +74,17 @@ pip install -r requirements.txt
 
 ## Claude Code CLIスラッシュコマンド設定（推奨）
 
-### /kanonコマンドの設定
+### /aloudコマンドの設定
 
 Claude Code CLIでスラッシュコマンドを使用すると、簡単に起動・常駐させることができます。
 
 1. **設定ファイルの作成**
    
-   `~/.claude/commands/kanon.md` を作成:
+   `~/.claude/commands/aloud.md` を作成:
 
    ```markdown
    ---
-   description: Kanon-Claude Aloud v3.2.1をバックグラウンド起動
+   description: Claude AIVIS Aloud v3.2.1をバックグラウンド起動
    allowed-tools: ["Bash"]
    run_in_background: true
    ---
@@ -96,7 +96,7 @@ Claude Code CLIでスラッシュコマンドを使用すると、簡単に起�
    
    Claude Code CLI内で:
    ```
-   /kanon
+   /aloud
    ```
 
    これだけで音声読み上げが開始されます！
