@@ -2,22 +2,32 @@
 
 Claude Codeの応答メッセージをAIVIS Speech Engineでリアルタイム朗読するツール
 
+## 最新バージョン: v3.2.1 (2025-08-27)
+
+### 🎉 新機能: Claude Code CLI完全対応
+- バックグラウンド常駐モード対応
+- スラッシュコマンド `/kanon` による簡単起動
+- グレースフルシャットダウン実装
+- 長期安定運用対応（24時間連続稼働可能）
+
 ## 概要
 
-Claude AIVIS Aloudは、Claude Code CLI（コマンドラインインターフェース）が生成するJSONファイルを監視し、応答メッセージをリアルタイムで音声朗読するツールです。
+Claude AIVIS Aloudは、Claude Code CLI（コマンドラインインターフェース）が生成するJSONLファイルを監視し、応答メッセージをリアルタイムで音声朗読するツールです。
 
 **主な特徴：**
-- 📝 JSONファイルのリアルタイム監視による応答メッセージの即座の朗読
+- 📝 JSONLファイルのリアルタイム監視による応答メッセージの即座の朗読
 - 🧠 Think Hard Mode（思考モード）と通常応答で異なる音量設定（思考：0.5、通常：1.0）
 - 🎯 日本語に特化した自然な読み上げ
 - ⚡ 低遅延での音声生成
 - 🔧 話者IDのカスタマイズ可能
+- 🔄 セッション自動切り替え機能
+- 💾 プロセス管理・PIDファイル対応
 
 ## 重要な注意事項とリスク
 
 ### ⚠️ セキュリティ上の重要な警告
 
-このツールは**JSONファイルをリアルタイム監視**する設計のため、以下のリスクがあります：
+このツールは**JSONLファイルをリアルタイム監視**する設計のため、以下のリスクがあります：
 
 1. **ファイルアクセス権限**: システムの特定ディレクトリへの読み取りアクセスが必要
 2. **プライバシー**: Claude Codeとのやり取りが音声として読み上げられます
@@ -42,49 +52,112 @@ Claude AIVIS Aloudは、Claude Code CLI（コマンドラインインターフ�
    - Windows版またはmacOS版を選択
 2. インストーラーを実行してセットアップ
 3. 初回起動時にデフォルトの音声モデルが自動ダウンロードされます
-4. AIVIS Speech Engineがポート50021で自動起動することを確認
+4. AIVIS Speech Engineがポート10101で自動起動することを確認
 
 ## インストール
 
+### 方法1: GitHubからクローン
+
 ```bash
 # リポジトリのクローン
-git clone https://github.com/JaH/Claude_AIVIS_Aloud.git
+git clone https://github.com/xxGodLiuxx/Claude_AIVIS_Aloud.git
 cd Claude_AIVIS_Aloud
 
 # 依存関係のインストール
 pip install -r requirements.txt
-
-# AIVIS Speech Engineを起動（別ターミナル）
-# Windowsの場合: AivisSpeech.exeを実行
-# その他: ドキュメント参照
 ```
+
+### 方法2: 直接ダウンロード
+
+最新版のスクリプトファイルを直接ダウンロード:
+- [kanon_aloud_v3.2.1.py](https://github.com/xxGodLiuxx/Claude_AIVIS_Aloud/blob/main/kanon_aloud_v3.2.1.py)
+
+## Claude Code CLIスラッシュコマンド設定（推奨）
+
+### /kanonコマンドの設定
+
+Claude Code CLIでスラッシュコマンドを使用すると、簡単に起動・常駐させることができます。
+
+1. **設定ファイルの作成**
+   
+   `~/.claude/commands/kanon.md` を作成:
+
+   ```markdown
+   ---
+   description: Kanon-Claude Aloud v3.2.1をバックグラウンド起動
+   allowed-tools: ["Bash"]
+   run_in_background: true
+   ---
+
+   python /path/to/kanon_aloud_v3.2.1.py
+   ```
+
+2. **使用方法**
+   
+   Claude Code CLI内で:
+   ```
+   /kanon
+   ```
+
+   これだけで音声読み上げが開始されます！
 
 ## 使用方法
 
 ### 基本的な使用
 
 ```bash
-# メインスクリプトの実行
-python claude_aivis_aloud.py
+# 直接実行
+python kanon_aloud_v3.2.1.py
+
+# バックグラウンド実行（Windows）
+start /B python kanon_aloud_v3.2.1.py
+
+# バックグラウンド実行（Unix系）
+nohup python kanon_aloud_v3.2.1.py &
 ```
 
-### 設定のカスタマイズ
+### プロセス管理
 
-`config.json`で以下の設定が可能です：
+```bash
+# プロセス確認
+# Windows
+tasklist | findstr python
 
-```json
-{
-  "speaker_id": 2001,  // 話者ID（後述のカスタマイズガイド参照）
-  "normal_volume": 1.0,  // 通常音量
-  "thinking_volume": 0.5,  // Think Hard Mode時の音量
-  "engine_host": "localhost",
-  "engine_port": 50021
-}
+# Unix系
+ps aux | grep kanon_aloud
+
+# グレースフルシャットダウン（推奨）
+# Windows
+taskkill /PID <process_id>
+
+# Unix系
+kill -TERM $(cat ~/.claude/kanon_aloud.pid)
+
+# 強制終了（非推奨）
+kill -9 <process_id>
+```
+
+## 設定
+
+### 主要設定項目（スクリプト内）
+
+```python
+# AivisSpeech Engine設定
+AIVIS_BASE_URL = "http://127.0.0.1:10101"
+AIVIS_SPEAKER_ID = 1325133120  # 話者ID
+
+# 音量設定
+VOLUME_NORMAL = 1.0     # 通常応答の音量
+VOLUME_THINKING = 0.5   # Thinking部分の音量
+
+# 朗読速度設定
+NARRATION_SPEED_NORMAL = 1.0    # 通常朗読
+NARRATION_SPEED_THINKING = 1.1  # 思考部分は少し速め
 ```
 
 ## 話者IDのカスタマイズ
 
-AIVIS Speechは複数の話者（ボイス）をサポートしています。詳細な手順は`docs/VOICE_CUSTOMIZATION.md`を参照してください。
+AIVIS Speechは複数の話者（ボイス）をサポートしています。
 
 ### クイックスタート
 
@@ -100,7 +173,7 @@ AIVIS Speechは複数の話者（ボイス）をサポートしています。�
    - 詳細手順: `examples/install_kanon.md`参照
 
 3. **話者IDの設定**
-   - `config.json`の`speaker_id`に、確認したIDを設定
+   - スクリプト内の`AIVIS_SPEAKER_ID`を変更
    - 各話者のスタイル（ノーマル、ハッピー等）ごとに異なるIDがあります
 
 ## トラブルシューティング
@@ -109,7 +182,7 @@ AIVIS Speechは複数の話者（ボイス）をサポートしています。�
 
 1. **「エンジンに接続できません」エラー**
    - AIVIS Speech Engineが起動しているか確認
-   - ポート番号（デフォルト: 50021）が正しいか確認
+   - ポート番号（デフォルト: 10101）が正しいか確認
    - ファイアウォール設定を確認
 
 2. **音声が再生されない**
@@ -120,6 +193,32 @@ AIVIS Speechは複数の話者（ボイス）をサポートしています。�
 3. **文字化けする**
    - UTF-8エンコーディングが正しく設定されているか確認
    - Windows環境の場合、コマンドプロンプトの文字コード設定を確認
+
+4. **タイムアウトエラー**
+   - Claude Code CLIでは`run_in_background: true`を設定
+   - またはターミナルで直接バックグラウンド実行
+
+## 長期運用のための機能
+
+### v3.2.1での改善点
+
+1. **メモリ管理**
+   - deque maxlen設定による制限
+   - ファイルハンドルの適切なクローズ
+   - スレッド終了処理の最適化
+
+2. **プロセス管理**
+   - PIDファイル自動管理
+   - 重複プロセス防止機能
+   - シグナルハンドリング（SIGTERM/SIGINT/SIGBREAK）
+
+3. **ログ管理**
+   - 7日以上古いログの自動削除
+   - ログローテーション機能
+
+4. **エラーハンドリング**
+   - 具体的な例外処理
+   - リソース解放の保証
 
 ## 謝辞
 
@@ -146,29 +245,24 @@ AIVIS Speechは複数の話者（ボイス）をサポートしています。�
 
 ## サポート
 
-問題報告やフィーチャーリクエストは[Issues](https://github.com/JaH/Claude_AIVIS_Aloud/issues)へお願いします。
+問題報告やフィーチャーリクエストは[Issues](https://github.com/xxGodLiuxx/Claude_AIVIS_Aloud/issues)へお願いします。
 
 ## 更新履歴
 
-- v1.3.0 (2025-08-21): リアルタイム処理最適化
-  - **重要な修正**: セッション切り替え時のメッセージスキップ問題を修正
-  - リアルタイム応答性の向上（ファイル末尾から監視開始）
-  - `skip_initial_messages`関数の改良（設定可能なスキップ数、デフォルト0）
-  - 新規セッション開始時も含めて全メッセージを確実に読み上げ
+詳細は[RELEASE_NOTES.md](RELEASE_NOTES.md)を参照してください。
 
-- v1.2.0 (2025-08-21): Thinkingモード強化
-  - Thinkingモードでのナンバリングリスト処理最適化
-  - バレットポイントの読み上げ改善
-  - 数字を含む読み上げの自然性向上
+### 最近のリリース
 
-- v1.1.0 (2025-08-21): バグ修正版
-  - ナンバリングリスト、時刻形式、大文字アルファベットの処理改善
-  - 通常モードでの読み上げ最適化
+- **v3.2.1 (2025-08-27)**: Claude Code CLI最適化版
+  - バックグラウンド実行サポート
+  - グレースフルシャットダウン実装
+  - プロセス管理強化（PIDファイル）
+  - 長期運用対応（24時間連続稼働）
+  - エラーハンドリング改善
 
-- v1.0.0 (2025-08-21): 初回リリース
-  - JSONファイルリアルタイム監視機能
-  - Think Hard Mode対応（音量差異化）
-  - 日本語特化の自然な読み上げ
+- **v3.2.0 (2025-08-27)**: Windows安定動作版
+  - セッション自動切り替え改善
+  - ファイル監視の安定性向上
 
 ---
 
