@@ -21,7 +21,7 @@ Claude AIVIS Aloudを5分で動かすための最短手順です。
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/JaH/Claude_AIVIS_Aloud.git
+git clone https://github.com/xxGodLiuxx/Claude_AIVIS_Aloud.git
 cd Claude_AIVIS_Aloud
 
 # 必要なパッケージをインストール
@@ -120,7 +120,7 @@ python claude_aivis_aloud.py
 
 ## 💬 サポート
 
-問題が解決しない場合は、[GitHub Issues](https://github.com/JaH/Claude_AIVIS_Aloud/issues)でお問い合わせください。
+問題が解決しない場合は、[GitHub Issues](https://github.com/xxGodLiuxx/Claude_AIVIS_Aloud/issues)でお問い合わせください。
 
 ---
 

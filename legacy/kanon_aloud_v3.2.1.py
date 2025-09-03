@@ -504,8 +504,6 @@ def process_text_for_narration(text):
     
     # Convert technical terms to more natural Japanese
     replacements = {
-        # v3.1.5: JaH support
-        'JaH': 'ジャー',
         'TODO': 'タスク',
         'API': 'エーピーアイ',
         'URL': 'アドレス',
@@ -533,14 +531,9 @@ def process_text_for_narration(text):
         'delete': '削除',
     }
     
-    # Apply replacements (v3.1.5: case-sensitive for JaH)
+    # Apply replacements
     for old, new in replacements.items():
-        if old == 'JaH':
-            # JaH is case-sensitive
-            text = text.replace(old, new)
-        else:
-            # Other terms are case-insensitive
-            text = re.sub(rf'\b{old}\b', new, text, flags=re.IGNORECASE)
+        text = re.sub(rf'\b{old}\b', new, text, flags=re.IGNORECASE)
     
     # v3.1.6: Convert uppercase alphabet sequences to katakana
     # This handles acronyms not in the dictionary
@@ -578,7 +571,7 @@ def test_voice_system():
     """Check AivisSpeech Engine operation"""
     import io
     
-    test_text = "ジャーさん、音声システム動作確認です"
+    test_text = "音声システム動作確認です"
     
     try:
         query_response = requests.post(
