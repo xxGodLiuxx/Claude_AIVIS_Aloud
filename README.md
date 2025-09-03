@@ -2,9 +2,10 @@
 
 Claude Codeの応答メッセージをAIVIS Speech Engineでリアルタイム朗読するツール
 
-## 最新バージョン: v3.2.2 (2025-09-03)
+## 最新バージョン: v3.2.3 (2025-09-03)
 
-### 🎉 v3.2.2 最新版の特徴
+### 🎉 v3.2.3 最新版の特徴
+- 🔧 日本語音声合成修正: URL エンコーディング対応により日本語テキストの音声合成を改善
 - タイムアウト対策: サイレント音声テストがデフォルト
 - より高速な初期化処理
 - バックグラウンド常駐モード対応（24時間連続稼働）
@@ -85,7 +86,7 @@ Claude Code CLIでスラッシュコマンドを使用すると、簡単に起�
 
    ```markdown
    ---
-   description: Claude AIVIS Aloud v3.2.2をバックグラウンド起動
+   description: Claude AIVIS Aloud v3.2.3をバックグラウンド起動
    allowed-tools: ["Bash"]
    run_in_background: true
    ---

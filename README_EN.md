@@ -2,9 +2,10 @@
 
 Real-time text-to-speech tool for Claude Code responses using AIVIS Speech Engine
 
-## Latest Version: v3.2.2 (2025-09-03)
+## Latest Version: v3.2.3 (2025-09-03)
 
-### 🎉 v3.2.2 Latest Edition Features
+### 🎉 v3.2.3 Latest Edition Features
+- 🔧 Japanese text synthesis fix: URL encoding support improves Japanese text audio synthesis
 - Timeout prevention with silent voice tests by default
 - Faster initialization process
 - Background daemon mode (24-hour continuous operation)
@@ -51,7 +52,7 @@ This tool uses **real-time JSON file monitoring**, which carries the following r
    - Choose Windows or macOS version
 2. Run the installer
 3. Default voice models will be automatically downloaded on first launch
-4. Confirm AIVIS Speech Engine starts on port 50021
+4. Confirm AIVIS Speech Engine starts on port 10101
 
 ## Installation
 
@@ -73,7 +74,7 @@ pip install -r requirements.txt
 python claude_aivis_aloud.py
 
 # Or use older stable version
-python legacy/kanon_aloud_v3.2.1.py
+python legacy/kanon_aloud_v3.2.2.py
 ```
 
 ### Configuration
@@ -87,7 +88,7 @@ Edit `config.json` to customize settings:
     "normal_volume": 1.0,       // Normal message volume
     "thinking_volume": 0.5,     // Think Hard Mode volume
     "engine_host": "localhost",
-    "engine_port": 50021
+    "engine_port": 10101
   }
 }
 ```
@@ -120,7 +121,7 @@ See the main [README.md](README.md) for detailed troubleshooting in Japanese.
 
 1. **"Cannot connect to engine" error**
    - Ensure AIVIS Speech is running
-   - Check port 50021 is correct
+   - Check port 10101 is correct
    - Check firewall settings
 
 2. **No audio output**

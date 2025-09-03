@@ -19,7 +19,7 @@ def list_available_speakers():
     """利用可能な話者を一覧表示"""
     
     # AIVIS Speech Engineのデフォルトポート
-    engine_url = "http://localhost:50021"
+    engine_url = "http://localhost:10101"
     
     try:
         print("AIVIS Speech Engineに接続中...")
@@ -89,8 +89,8 @@ def list_available_speakers():
         print("=" * 70)
         print("\n以下を確認してください：")
         print("1. AIVIS Speechが起動している")
-        print("2. AIVIS Speech Engineがポート50021で動作している")
-        print("3. ファイアウォールがポート50021をブロックしていない")
+        print("2. AIVIS Speech Engineがポート10101で動作している")
+        print("3. ファイアウォールがポート10101をブロックしていない")
         print("\nAIVIS Speechの起動方法:")
         print("1. AIVIS Project公式サイトからダウンロード")
         print("   https://aivis-project.com/")
@@ -109,7 +109,7 @@ def list_available_speakers():
 
 def check_engine_status():
     """エンジンの状態を確認"""
-    engine_url = "http://localhost:50021"
+    engine_url = "http://localhost:10101"
     
     try:
         response = requests.get(f"{engine_url}/version", timeout=2)

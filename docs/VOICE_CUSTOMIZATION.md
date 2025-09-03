@@ -42,7 +42,7 @@ def list_available_speakers():
     """利用可能な話者を一覧表示"""
     
     # AIVIS Speech Engineのデフォルトポート
-    engine_url = "http://localhost:50021"
+    engine_url = "http://localhost:10101"
     
     try:
         # 話者一覧を取得
@@ -72,7 +72,7 @@ def list_available_speakers():
         print("エラー: AIVIS Speech Engineに接続できません")
         print("以下を確認してください：")
         print("1. AIVIS Speech Engineが起動している")
-        print("2. ポート50021で動作している")
+        print("2. ポート10101で動作している")
         
     except Exception as e:
         print(f"エラーが発生しました: {e}")
@@ -86,7 +86,7 @@ if __name__ == "__main__":
 1. AIVIS Speech Engineを起動
 2. ブラウザで以下のURLにアクセス：
    ```
-   http://localhost:50021/speakers
+   http://localhost:10101/speakers
    ```
 3. JSON形式で話者一覧が表示されます
 
@@ -154,7 +154,7 @@ import requests
 model_path = "path/to/model.aivmx"
 
 # APIエンドポイント
-url = "http://localhost:50021/aivm_models/install"
+url = "http://localhost:10101/aivm_models/install"
 
 # ファイルをアップロード
 with open(model_path, 'rb') as f:
@@ -258,13 +258,13 @@ else:
 
 **解決方法**:
 1. AIVIS Speech Engineが起動しているか確認
-2. ポート50021が使用されていないか確認：
+2. ポート10101が使用されていないか確認：
    ```bash
    # Windows
-   netstat -an | findstr :50021
+   netstat -an | findstr :10101
    
    # Mac/Linux
-   lsof -i :50021
+   lsof -i :10101
    ```
 3. ファイアウォール設定を確認
 

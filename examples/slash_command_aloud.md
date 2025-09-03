@@ -1,11 +1,11 @@
 ---
-description: Claude AIVIS Aloud v3.2.2をバックグラウンド起動
+description: Claude AIVIS Aloud v3.2.3をバックグラウンド起動
 allowed-tools: ["Bash"]
 run_in_background: true
 ---
 
 # Claude AIVIS Aloudを起動します
-echo "[*] Starting Claude AIVIS Aloud v3.2.2..." && python /path/to/claude_aivis_aloud.py
+echo "[*] Starting Claude AIVIS Aloud v3.2.3..." && python /path/to/claude_aivis_aloud.py
 
 # 注意事項:
 # 1. /path/to/ を実際のパスに置き換えてください
