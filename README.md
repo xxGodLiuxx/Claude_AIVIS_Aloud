@@ -71,7 +71,7 @@ pip install -r requirements.txt
 ### 方法2: 直接ダウンロード
 
 最新版のスクリプトファイルを直接ダウンロード:
-- [kanon_aloud_v3.2.1.py](https://github.com/xxGodLiuxx/Claude_AIVIS_Aloud/blob/main/kanon_aloud_v3.2.1.py)
+- [claude_aivis_aloud.py](https://github.com/xxGodLiuxx/Claude_AIVIS_Aloud/blob/main/claude_aivis_aloud.py)
 
 ## Claude Code CLIスラッシュコマンド設定（推奨）
 
@@ -85,12 +85,12 @@ Claude Code CLIでスラッシュコマンドを使用すると、簡単に起�
 
    ```markdown
    ---
-   description: Claude AIVIS Aloud v3.2.1をバックグラウンド起動
+   description: Claude AIVIS Aloud v3.2.2をバックグラウンド起動
    allowed-tools: ["Bash"]
    run_in_background: true
    ---
 
-   python /path/to/kanon_aloud_v3.2.1.py
+   python /path/to/claude_aivis_aloud.py
    ```
 
 2. **使用方法**
@@ -108,13 +108,13 @@ Claude Code CLIでスラッシュコマンドを使用すると、簡単に起�
 
 ```bash
 # 直接実行
-python kanon_aloud_v3.2.1.py
+python claude_aivis_aloud.py
 
 # バックグラウンド実行（Windows）
-start /B python kanon_aloud_v3.2.1.py
+start /B python claude_aivis_aloud.py
 
 # バックグラウンド実行（Unix系）
-nohup python kanon_aloud_v3.2.1.py &
+nohup python claude_aivis_aloud.py &
 ```
 
 ### プロセス管理

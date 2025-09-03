@@ -2,11 +2,11 @@
 
 Real-time text-to-speech tool for Claude Code responses using AIVIS Speech Engine
 
-## Latest Version: v3.3.0 (2025-09-03)
+## Latest Version: v3.2.2 (2025-09-03)
 
-### 🎉 v3.3.0 Unified Edition Features
-- Integration of enterprise features and enhanced JSONL monitoring
-- 6-stage clear session switching process
+### 🎉 v3.2.2 Latest Edition Features
+- Timeout prevention with silent voice tests by default
+- Faster initialization process
 - Background daemon mode (24-hour continuous operation)
 - Easy startup with `/aloud` slash command
 - Graceful shutdown implementation
@@ -70,7 +70,7 @@ pip install -r requirements.txt
 
 ```bash
 # Run the latest version
-python kanon_aloud_v3.3.0.py
+python claude_aivis_aloud.py
 
 # Or use older stable version
 python legacy/kanon_aloud_v3.2.1.py
