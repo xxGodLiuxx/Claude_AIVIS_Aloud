@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude AIVIS Aloud v3.2.2
+Claude AIVIS Aloud v3.2.3
 Optimized for Claude Code CLI with timeout prevention
 Volume: Normal 1.0, Thinking 0.5
-Based on v3.2.1 with improved startup time and better compatibility
-v3.2.2: Silent voice test by default, faster initialization
+Based on v3.2.2 with URL encoding fix for Japanese text
+v3.2.3: URL encoding fix for proper Japanese audio synthesis
 """
 
 import json
@@ -27,6 +27,7 @@ import signal
 import atexit
 import requests
 import pygame
+from urllib.parse import quote
 
 # Windows environment UTF-8 force settings
 if sys.platform == 'win32':
@@ -259,9 +260,10 @@ def speak_single_chunk(text, speed, volume=1.0):
     import io
     
     try:
-        # Generate AudioQuery
+        # Generate AudioQuery with proper URL encoding
+        encoded_text = quote(text, safe='')
         query_response = requests.post(
-            f"{AIVIS_BASE_URL}/audio_query?speaker={AIVIS_SPEAKER_ID}&text={text}",
+            f"{AIVIS_BASE_URL}/audio_query?speaker={AIVIS_SPEAKER_ID}&text={encoded_text}",
             timeout=10
         )
         
@@ -713,7 +715,7 @@ def monitor_and_speak():
     logger.info(f"[Monitor] Check interval: {CHECK_INTERVAL} seconds")
     logger.info(f"[Monitor] Auto session detection: ENABLED")
     logger.info("="*70)
-    logger.info("Claude AIVIS Aloud v3.2.2")
+    logger.info("Claude AIVIS Aloud v3.2.3")
     logger.info("Features:")
     logger.info("  - Simple FIFO queue (no priority system)")
     logger.info("  - No hook event processing")
@@ -926,7 +928,7 @@ def main():
     # Register cleanup function
     atexit.register(cleanup_at_exit)
     print("="*70)
-    print("Claude AIVIS Aloud v3.2.2")
+    print("Claude AIVIS Aloud v3.2.3")
     print("Optimized for fast startup and timeout prevention")
     print(f"Voice test: {'Enabled' if DEBUG_TEST_VOICE else 'Silent mode (faster startup)'}")
     print("="*70)
