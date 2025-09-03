@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Kanon-Claude Aloud v3.3.0
-Unified version with enhanced JSONL monitoring and text processing
-Combines v3.2.1 enterprise features with v3.1.5 monitoring improvements
+Claude AIVIS Aloud v3.2.2
+Optimized for Claude Code CLI with timeout prevention
 Volume: Normal 1.0, Thinking 0.5
-Features: Background execution, signal handling, improved session switching
+Based on v3.2.1 with improved startup time and better compatibility
+v3.2.2: Silent voice test by default, faster initialization
 """
 
 import json
@@ -47,7 +47,7 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-logger = logging.getLogger('kanon')
+logger = logging.getLogger('claude_aivis')
 
 # ===============================
 # Global variables and settings
@@ -78,8 +78,8 @@ VOLUME_THINKING = 0.5  # Thinking部分の音量（より控えめ）
 # Dynamic file switching settings
 CHECK_INTERVAL = 10  # seconds (new session check interval)
 
-# Debug settings
-DEBUG_TEST_VOICE = False  # True: Enable debug test voice, False: Disable (silent engine check)
+# Debug settings (Default False for faster startup)
+DEBUG_TEST_VOICE = False  # True: Enable test voice, False: Silent mode (recommended)
 
 # ===============================
 # Log cleanup function
@@ -198,7 +198,7 @@ def speech_worker_simple():
     
     pygame.mixer.init(frequency=24000, size=-16, channels=1)
     
-    logger.info("[SpeechWorker] Simple worker started (v3.3.0)")
+    logger.info("[SpeechWorker] Simple worker started (v3.2.0)")
     
     while not _stop_flag.is_set():
         try:
@@ -531,7 +531,7 @@ def process_text_for_narration(text):
         'delete': '削除',
     }
     
-    # Apply replacements
+    # Apply replacements (case-insensitive for all terms)
     for old, new in replacements.items():
         text = re.sub(rf'\b{old}\b', new, text, flags=re.IGNORECASE)
     
@@ -568,7 +568,7 @@ def process_text_for_narration(text):
     return text.strip()
 
 def test_voice_system():
-    """Check AivisSpeech Engine operation"""
+    """Check AivisSpeech Engine operation (optimized for fast startup)"""
     import io
     
     test_text = "音声システム動作確認です"
@@ -671,9 +671,9 @@ def skip_initial_messages(file_handle, skip_count=0):
 
 def monitor_and_speak():
     """
-    Dynamic file switching supported version (v3.3.0)
-    Enhanced JSONL monitoring with 6-stage session switching process
-    Combines v3.2.1 stability with v3.1.5 monitoring improvements
+    Dynamic file switching supported version (v3.2.0)
+    Improved file monitoring for Windows stability
+    Uses tail -f like behavior for reliable message detection
     """
     global _speech_thread
     
@@ -713,7 +713,7 @@ def monitor_and_speak():
     logger.info(f"[Monitor] Check interval: {CHECK_INTERVAL} seconds")
     logger.info(f"[Monitor] Auto session detection: ENABLED")
     logger.info("="*70)
-    logger.info("Kanon-Claude Aloud v3.3.0")
+    logger.info("Claude AIVIS Aloud v3.2.2")
     logger.info("Features:")
     logger.info("  - Simple FIFO queue (no priority system)")
     logger.info("  - No hook event processing")
@@ -926,8 +926,9 @@ def main():
     # Register cleanup function
     atexit.register(cleanup_at_exit)
     print("="*70)
-    print("Kanon-Claude Aloud v3.3.0")
-    print("Unified version with enhanced JSONL monitoring and text processing")
+    print("Claude AIVIS Aloud v3.2.2")
+    print("Optimized for fast startup and timeout prevention")
+    print(f"Voice test: {'Enabled' if DEBUG_TEST_VOICE else 'Silent mode (faster startup)'}")
     print("="*70)
     
     # Cleanup duplicate processes

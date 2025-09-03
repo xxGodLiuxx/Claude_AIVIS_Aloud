@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude AIVIS Aloud v1.3.0
-Real-time processing optimized version
+Claude AIVIS Aloud v3.2.2
+Optimized for Claude Code CLI with timeout prevention
 Volume: Normal 1.0, Thinking 0.5
-Based on v1.2.0 with improved real-time response and fixed message detection
+Based on v3.2.1 with improved startup time and better compatibility
+v3.2.2: Silent voice test by default, faster initialization
 """
 
 import json
@@ -22,6 +23,10 @@ import hashlib
 import threading
 import queue
 import subprocess
+import signal
+import atexit
+import requests
+import pygame
 
 # Windows environment UTF-8 force settings
 if sys.platform == 'win32':
@@ -42,7 +47,7 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-logger = logging.getLogger('kanon')
+logger = logging.getLogger('claude_aivis')
 
 # ===============================
 # Global variables and settings
@@ -51,6 +56,8 @@ _processed_messages = deque(maxlen=100)  # Duplicate prevention
 _speech_queue = queue.Queue()  # Simple FIFO queue
 _speech_thread = None
 _stop_flag = threading.Event()
+_max_runtime = 3600 * 24  # 24 hours max runtime
+_start_time = None
 
 # AivisSpeech Engine settings
 AIVIS_BASE_URL = "http://127.0.0.1:10101"
@@ -70,6 +77,9 @@ VOLUME_THINKING = 0.5  # Thinking部分の音量（より控えめ）
 
 # Dynamic file switching settings
 CHECK_INTERVAL = 10  # seconds (new session check interval)
+
+# Debug settings (Default False for faster startup)
+DEBUG_TEST_VOICE = False  # True: Enable test voice, False: Silent mode (recommended)
 
 # ===============================
 # Log cleanup function
@@ -93,8 +103,8 @@ def cleanup_old_logs(retention_days=7):
                 if age_days > retention_days:
                     log_file.unlink()
                     deleted_count += 1
-            except:
-                pass
+            except Exception:
+                pass  # Ignore individual file deletion errors
         
         if deleted_count > 0:
             logger.info(f"[Cleanup] Deleted {deleted_count} old log files (>{retention_days} days)")
@@ -104,6 +114,29 @@ def cleanup_old_logs(retention_days=7):
 # ===============================
 # Duplicate process prevention
 # ===============================
+def signal_handler(signum, frame):
+    """Handle termination signals gracefully"""
+    logger.info(f"[Signal] Received signal {signum}, initiating graceful shutdown...")
+    _stop_flag.set()
+    sys.exit(0)
+
+def cleanup_at_exit():
+    """Cleanup function called at exit"""
+    logger.info("[Exit] Performing cleanup...")
+    _stop_flag.set()
+    
+    # Clean up PID file
+    pid_file = Path.home() / '.claude' / 'kanon_aloud.pid'
+    if pid_file.exists():
+        try:
+            with open(pid_file, 'r') as f:
+                stored_pid = int(f.read().strip())
+                if stored_pid == os.getpid():
+                    pid_file.unlink()
+                    logger.info("[Exit] Removed PID file")
+        except Exception:
+            pass  # Ignore PID file cleanup errors
+
 def cleanup_duplicate_processes():
     """Terminate all existing kanon_aloud processes at startup"""
     current_pid = os.getpid()
@@ -132,8 +165,8 @@ def cleanup_duplicate_processes():
                 try:
                     os.kill(int(pid), 9)
                     logger.info(f"[Cleanup] Terminated duplicate process: PID {pid}")
-                except:
-                    pass
+                except (OSError, ValueError):
+                    pass  # Process already terminated
         
         # Clean up lock files
         lock_file = Path.home() / '.claude' / 'kanon_aloud.lock'
@@ -161,13 +194,11 @@ def speech_worker_simple():
     """
     Simple speech worker: Process messages in order (FIFO)
     """
-    import requests
-    import pygame
     import io
     
     pygame.mixer.init(frequency=24000, size=-16, channels=1)
     
-    logger.info("[SpeechWorker] Simple worker started (v1.3.0)")
+    logger.info("[SpeechWorker] Simple worker started (v3.2.0)")
     
     while not _stop_flag.is_set():
         try:
@@ -218,15 +249,13 @@ def speech_worker_simple():
             logger.error(f"[SpeechWorker] Error: {e}")
             try:
                 _speech_queue.task_done()
-            except:
-                pass
+            except ValueError:
+                pass  # Ignore task_done errors
 
 def speak_single_chunk(text, speed, volume=1.0):
     """
     Read a single chunk reliably with volume control (v3.1.4)
     """
-    import requests
-    import pygame
     import io
     
     try:
@@ -368,11 +397,11 @@ def split_text_naturally(text, max_length=AIVIS_OPTIMAL_LENGTH):
     return chunks
 
 def process_thinking_for_narration(thinking_text):
-    """Convert thinking text for full narration without prefix (v1.2.0: enhanced)"""
+    """Convert thinking text for full narration without prefix (v3.1.7: enhanced)"""
     # 思考内容を全文処理（要約なし、前置詞なし）
     text = thinking_text.strip()
     
-    # v1.2.0: Convert numbered lists to natural reading format (1. -> 1、)
+    # v3.1.7: Convert numbered lists to natural reading format (1. -> 1、)
     # This must be done before line break processing
     text = re.sub(r'(\d+)\.(\s*)', r'\1、', text)
     
@@ -502,7 +531,7 @@ def process_text_for_narration(text):
         'delete': '削除',
     }
     
-    # Apply replacements
+    # Apply replacements (case-insensitive for all terms)
     for old, new in replacements.items():
         text = re.sub(rf'\b{old}\b', new, text, flags=re.IGNORECASE)
     
@@ -539,9 +568,7 @@ def process_text_for_narration(text):
     return text.strip()
 
 def test_voice_system():
-    """Check AivisSpeech Engine operation"""
-    import requests
-    import pygame
+    """Check AivisSpeech Engine operation (optimized for fast startup)"""
     import io
     
     test_text = "音声システム動作確認です"
@@ -565,16 +592,21 @@ def test_voice_system():
         )
         
         if response.status_code == 200:
-            pygame.mixer.init(frequency=24000, size=-16, channels=1)
-            audio_data = io.BytesIO(response.content)
-            sound = pygame.mixer.Sound(audio_data)
-            channel = sound.play()
+            # Only play test sound if DEBUG_TEST_VOICE is True
+            if DEBUG_TEST_VOICE:
+                pygame.mixer.init(frequency=24000, size=-16, channels=1)
+                audio_data = io.BytesIO(response.content)
+                sound = pygame.mixer.Sound(audio_data)
+                channel = sound.play()
+                
+                if channel:
+                    while channel.get_busy():
+                        pygame.time.wait(10)
+                
+                logger.info("AivisSpeech Engine is running (with test voice)")
+            else:
+                logger.info("AivisSpeech Engine is running (silent check)")
             
-            if channel:
-                while channel.get_busy():
-                    pygame.time.wait(10)
-            
-            logger.info("AivisSpeech Engine is running")
             return True
             
     except Exception as e:
@@ -619,9 +651,9 @@ def find_latest_jsonl():
     return latest
 
 def skip_initial_messages(file_handle, skip_count=0):
-    """Skip initial messages (v1.3.0: configurable, default 0)"""
+    """Skip initial messages (v3.1.8: configurable, default 0)"""
     skipped_count = 0
-    for _ in range(skip_count):  # v1.3.0: Default 0 to avoid missing messages
+    for _ in range(skip_count):  # v3.1.8: Default 0 to avoid missing messages
         line = file_handle.readline()
         if not line:
             break
@@ -630,8 +662,8 @@ def skip_initial_messages(file_handle, skip_count=0):
             msg_id = generate_message_id(data)
             _processed_messages.append(msg_id)
             skipped_count += 1
-        except:
-            pass
+        except json.JSONDecodeError:
+            pass  # Skip invalid JSON lines
     
     if skipped_count > 0:
         logger.info(f"[Monitor] Skipped {skipped_count} initial messages")
@@ -639,8 +671,9 @@ def skip_initial_messages(file_handle, skip_count=0):
 
 def monitor_and_speak():
     """
-    Dynamic file switching supported version
-    Simplified without hooks and priority
+    Dynamic file switching supported version (v3.2.0)
+    Improved file monitoring for Windows stability
+    Uses tail -f like behavior for reliable message detection
     """
     global _speech_thread
     
@@ -657,6 +690,8 @@ def monitor_and_speak():
     current_file = None
     current_handle = None
     last_check = 0
+    file_position = 0  # Track file position for proper tail behavior
+    known_files = set()  # Track known JSONL files to detect truly new sessions
     
     # Initial file selection
     current_file = find_latest_jsonl()
@@ -664,11 +699,21 @@ def monitor_and_speak():
         logger.error("No JSONL file found at startup")
         return
     
+    # Initialize known files with all existing files
+    patterns = [
+        r"C:\Users\liuco\.claude\projects\**\*.jsonl",
+        r"C:\Users\*\.claude\projects\**\*.jsonl"
+    ]
+    for pattern in patterns:
+        files = glob(pattern, recursive=True)
+        known_files.update(files)
+    
     logger.info(f"[Monitor] Initial file: {os.path.basename(current_file)}")
+    logger.info(f"[Monitor] Tracking {len(known_files)} existing JSONL files")
     logger.info(f"[Monitor] Check interval: {CHECK_INTERVAL} seconds")
     logger.info(f"[Monitor] Auto session detection: ENABLED")
     logger.info("="*70)
-    logger.info("Claude AIVIS Aloud v1.3.0")
+    logger.info("Claude AIVIS Aloud v3.2.2")
     logger.info("Features:")
     logger.info("  - Simple FIFO queue (no priority system)")
     logger.info("  - No hook event processing")
@@ -679,14 +724,29 @@ def monitor_and_speak():
     
     try:
         while not _stop_flag.is_set():
-            # Periodic latest file check
+            # Periodic new session check (v3.2.0: only detect truly new files)
             now = time.time()
             if now - last_check > CHECK_INTERVAL:
-                latest_file = find_latest_jsonl()
+                # Find all current JSONL files
+                patterns = [
+                    r"C:\Users\liuco\.claude\projects\**\*.jsonl",
+                    r"C:\Users\*\.claude\projects\**\*.jsonl"
+                ]
+                all_current_files = set()
+                for pattern in patterns:
+                    files = glob(pattern, recursive=True)
+                    all_current_files.update(files)
                 
-                # File switching determination
-                if latest_file and latest_file != current_file:
-                    logger.info(f"[SESSION SWITCH] {os.path.basename(current_file)} -> {os.path.basename(latest_file)}")
+                # Check for truly new files (not in known_files)
+                new_files = all_current_files - known_files
+                
+                if new_files:
+                    # New session detected - switch to the newest file
+                    latest_file = max(new_files, key=lambda x: os.path.getctime(x) if os.path.exists(x) else 0)
+                    known_files.update(new_files)  # Add new files to known set
+                    
+                    logger.info(f"[NEW SESSION] {os.path.basename(latest_file)} detected")
+                    logger.info(f"[SESSION SWITCH] {os.path.basename(current_file) if current_file else 'None'} -> {os.path.basename(latest_file)}")
                     
                     # 1. Close old handle
                     if current_handle:
@@ -697,14 +757,21 @@ def monitor_and_speak():
                     current_file = latest_file
                     current_handle = open(current_file, 'r', encoding='utf-8', errors='ignore')
                     
-                    # 3. Set start position (v1.3.0: start from end for real-time)
-                    current_handle.seek(0, 2)  # Move to end of file
+                    # 3. Set start position (v3.2.0: proper tail -f behavior)
+                    # Start from last 10KB for context, but avoid duplicates
+                    current_handle.seek(0, 2)
+                    file_size = current_handle.tell()
+                    start_pos = max(0, file_size - 10240)  # Last 10KB
+                    current_handle.seek(start_pos)
+                    if start_pos > 0:
+                        current_handle.readline()  # Skip partial line
+                    file_position = current_handle.tell()
                     
                     # 4. Clear processed message IDs
                     _processed_messages.clear()
                     logger.debug("Cleared processed message cache")
                     
-                    # 5. Skip initial messages (v1.3.0: don't skip on session switch)
+                    # 5. Skip initial messages (v3.1.8: don't skip on session switch)
                     # skip_initial_messages(current_handle)  # Disabled to avoid missing messages
                     
                     # 6. Voice notification with clear announcement
@@ -728,22 +795,44 @@ def monitor_and_speak():
             if not current_handle and current_file:
                 current_handle = open(current_file, 'r', encoding='utf-8', errors='ignore')
                 
-                # Set start position (v1.3.0: start from end for real-time)
-                current_handle.seek(0, 2)  # Move to end of file
+                # Set start position (v3.2.0: proper tail -f behavior)
+                # Start from last 10KB for initial context
+                current_handle.seek(0, 2)
+                file_size = current_handle.tell()
+                start_pos = max(0, file_size - 10240)  # Last 10KB
+                current_handle.seek(start_pos)
+                if start_pos > 0:
+                    current_handle.readline()  # Skip partial line
+                file_position = current_handle.tell()
                 
-                # Skip initial messages (v1.3.0: disabled to avoid missing messages)
-                # skip_initial_messages(current_handle)  # Disabled
+                # Skip initial messages (v3.1.8: skip only on initial startup)
+                # skip_initial_messages(current_handle)  # Disabled to avoid missing messages
                 
                 logger.info(f"[Monitor] Opened file: {os.path.basename(current_file)}")
             
-            # Normal read processing
+            # Normal read processing (v3.2.0: improved for Windows)
             if current_handle:
                 try:
+                    # Check if file has grown (new data available)
+                    current_handle.seek(0, 2)  # Go to end
+                    end_position = current_handle.tell()
+                    
+                    if end_position > file_position:
+                        # New data available, go back to last read position
+                        current_handle.seek(file_position)
+                    else:
+                        # No new data
+                        time.sleep(0.05)  # Reduce CPU load
+                        continue
+                    
                     line = current_handle.readline()
                     
                     if not line:
                         time.sleep(0.05)  # Reduce CPU load
                         continue
+                    
+                    # Update position after successful read
+                    file_position = current_handle.tell()
                     
                     # JSON parsing and processing
                     data = json.loads(line)
@@ -825,9 +914,21 @@ def monitor_and_speak():
 
 def main():
     """Main entry point"""
+    global _start_time
+    _start_time = time.time()
+    
+    # Set up signal handlers
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    if sys.platform == 'win32':
+        signal.signal(signal.SIGBREAK, signal_handler)
+    
+    # Register cleanup function
+    atexit.register(cleanup_at_exit)
     print("="*70)
-    print("Claude AIVIS Aloud v1.3.0")
-    print("Simplified version without hooks and priority")
+    print("Claude AIVIS Aloud v3.2.2")
+    print("Optimized for fast startup and timeout prevention")
+    print(f"Voice test: {'Enabled' if DEBUG_TEST_VOICE else 'Silent mode (faster startup)'}")
     print("="*70)
     
     # Cleanup duplicate processes
@@ -855,7 +956,16 @@ def main():
     print("  - Assistant responses: Full text reading")
     print("  - Dynamic file switching: Auto-detect new sessions")
     print("  - Duplicate process prevention")
+    print("  - Background execution support")
+    print("  - Graceful shutdown handling")
     print("="*70)
+    
+    # Write PID file for process management
+    pid_file = Path.home() / '.claude' / 'kanon_aloud.pid'
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(pid_file, 'w') as f:
+        f.write(str(os.getpid()))
+    logger.info(f"[Process] PID file created: {pid_file}")
     
     try:
         monitor_and_speak()
