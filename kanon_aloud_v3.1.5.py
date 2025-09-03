@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Kanon-Claude Aloud v3.1.5
-Improved natural reading with JaH support
+Improved natural reading with enhanced pronunciation
 Volume: Normal 1.0, Thinking 0.5
 Based on v3.1.4 with better list and bracket handling
 """
@@ -436,8 +436,6 @@ def process_text_for_narration(text):
     
     # Convert technical terms to more natural Japanese
     replacements = {
-        # v3.1.5: JaH support
-        'JaH': 'ジャー',
         'TODO': 'タスク',
         'API': 'エーピーアイ',
         'URL': 'アドレス',
@@ -465,14 +463,9 @@ def process_text_for_narration(text):
         'delete': '削除',
     }
     
-    # Apply replacements (v3.1.5: case-sensitive for JaH)
+    # Apply replacements
     for old, new in replacements.items():
-        if old == 'JaH':
-            # JaH is case-sensitive
-            text = text.replace(old, new)
-        else:
-            # Other terms are case-insensitive
-            text = re.sub(rf'\b{old}\b', new, text, flags=re.IGNORECASE)
+        text = re.sub(rf'\b{old}\b', new, text, flags=re.IGNORECASE)
     
     # Clean up consecutive punctuation
     text = re.sub(r'。+', '。', text)  # Multiple periods to single
@@ -489,7 +482,7 @@ def test_voice_system():
     import pygame
     import io
     
-    test_text = "ジャーさん、音声システム動作確認です"
+    test_text = "音声システム動作確認です"
     
     try:
         query_response = requests.post(
