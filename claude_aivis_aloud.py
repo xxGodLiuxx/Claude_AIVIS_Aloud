@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude AIVIS Aloud v3.2.3
-Optimized for Claude Code CLI with timeout prevention
-Volume: Normal 1.0, Thinking 0.5
-Based on v3.2.2 with URL encoding fix for Japanese text
-v3.2.3: URL encoding fix for proper Japanese audio synthesis
+Claude AIVIS Aloud v4.0.0
+Claude Code Desktop support with full Japanese narration
+- Tool use, thinking, user input confirmation in natural Japanese
+- Volume: Normal 0.3, Thinking/Tool 0.1
+- Subagent JSONL exclusion, 100+ term dictionary
+Based on v3.2.3
 """
 
 import json
@@ -72,9 +73,9 @@ NARRATION_SPEED_THINKING = 1.1  # 思考部分は少し速め
 NARRATION_PAUSE_SENTENCE = 0.5  # 文末の間
 NARRATION_PAUSE_PARAGRAPH = 0.8  # 段落間の間
 
-# Volume settings for differentiation (v3.1.4)
-VOLUME_NORMAL = 1.0  # 通常の応答の音量
-VOLUME_THINKING = 0.5  # Thinking部分の音量（より控えめ）
+# Volume settings for differentiation (v4.0)
+VOLUME_NORMAL = 0.3  # 通常の応答の音量
+VOLUME_THINKING = 0.1  # Thinking・ツール部分の音量
 
 # Dynamic file switching settings
 CHECK_INTERVAL = 10  # seconds (new session check interval)
@@ -149,7 +150,7 @@ def cleanup_duplicate_processes():
         Get-WmiObject Win32_Process | Where-Object {
             $_.ProcessId -ne %d -and 
             $_.Name -eq 'python.exe' -and 
-            $_.CommandLine -like '*kanon_aloud*'
+            ($_.CommandLine -like '*kanon_aloud*' -or $_.CommandLine -like '*claude_aivis_aloud*')
         } | ForEach-Object { $_.ProcessId }
         """ % current_pid
         
@@ -399,45 +400,241 @@ def split_text_naturally(text, max_length=AIVIS_OPTIMAL_LENGTH):
     return chunks
 
 def process_thinking_for_narration(thinking_text):
-    """Convert thinking text for full narration without prefix (v3.1.7: enhanced)"""
-    # 思考内容を全文処理（要約なし、前置詞なし）
+    """Convert thinking to natural Japanese summary (v4.0)"""
     text = thinking_text.strip()
-    
-    # v3.1.7: Convert numbered lists to natural reading format (1. -> 1、)
-    # This must be done before line break processing
-    text = re.sub(r'(\d+)\.(\s*)', r'\1、', text)
-    
-    # Remove bullet markers for cleaner reading
-    text = re.sub(r'^- (.+?)$', r'\1', text, flags=re.MULTILINE)
-    text = re.sub(r'^• (.+?)$', r'\1', text, flags=re.MULTILINE)
-    text = re.sub(r'^· (.+?)$', r'\1', text, flags=re.MULTILINE)
-    
-    # 基本的な変換処理
-    text = re.sub(r'\n+', '、', text)
-    text = re.sub(r'\s+', ' ', text)
-    
-    # 文字化けや不要な文字を除去（ただし数字は保持）
-    text = re.sub(r'[^\w\s\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF、。！？0-9]', '', text)
-    
-    # 空の場合はNoneを返す
-    if not text.strip():
+    if not text:
         return None
-    
-    return text
+
+    # Japanese ratio check
+    jp_chars = re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', text)
+    jp_ratio = len(jp_chars) / max(len(text), 1)
+
+    if jp_ratio > 0.3:
+        # Mostly Japanese — light cleanup
+        text = re.sub(r'```[\s\S]*?```', '', text)
+        text = re.sub(r'`[^`]+`', '', text)
+        text = re.sub(r'https?://\S+', '', text)
+        text = re.sub(r'[A-Za-z_/\\]{10,}', '', text)
+        text = re.sub(r'(\d+)\.(\s*)', r'\1、', text)
+        text = re.sub(r'^[\-•·*]\s*', '', text, flags=re.MULTILINE)
+        text = re.sub(r'\n+', '、', text)
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'[、。]{2,}', '。', text)
+        text = text.strip('、。 ')
+        if len(text) > 200:
+            text = text[:200] + '。以上'
+        return text if text else None
+
+    # English thinking -> Japanese summary
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+
+    _en_jp = [
+        (r"(?i)the user wants?(?: me)? to\s+(.+)", r"ユーザーの依頼は、\1"),
+        (r"(?i)i need to\s+(.+)", r"\1が必要です"),
+        (r"(?i)i should\s+(.+)", r"\1するべきですね"),
+        (r"(?i)let me (?:check|look at|examine|verify)\s+(.+)", r"\1を確認します"),
+        (r"(?i)let me (?:think|consider)\s*(.*)$", r"考えてみます。\1"),
+        (r"(?i)(?:first|next),?\s*(?:i(?:'ll| will| need to| should))?\s*(.+)", r"まず、\1"),
+        (r"(?i)(?:now|then),?\s*(?:i(?:'ll| will| need to| should))?\s*(.+)", r"次に、\1"),
+        (r"(?i)the (?:issue|problem|bug) is\s+(.+)", r"問題は、\1"),
+        (r"(?i)this (?:means|indicates|suggests)\s+(.+)", r"つまり、\1"),
+        (r"(?i)i(?:'ll| will) (?:try|attempt) to\s+(.+)", r"\1を試みます"),
+        (r"(?i)looking at\s+(.+)", r"\1を見ています"),
+        (r"(?i)i can see (?:that\s+)?(.+)", r"\1が分かりました"),
+        (r"(?i)(?:so|therefore),?\s+(.+)", r"したがって、\1"),
+    ]
+
+    converted = []
+    for line in lines[:8]:
+        if re.match(r'^[\s{}\[\]<>/\\|`]', line):
+            continue
+        if len(re.findall(r'[/\\{}()\[\]<>]', line)) > 4:
+            continue
+        matched = False
+        for pat, repl in _en_jp:
+            if re.match(pat, line):
+                c = re.sub(pat, repl, line)
+                c = _clean_english_residue(c)
+                if c and len(c) > 2:
+                    converted.append(c)
+                matched = True
+                break
+        if not matched:
+            c = _clean_english_residue(line)
+            if c and len(c) > 2:
+                converted.append(c)
+
+    if not converted:
+        return None
+
+    result = '。'.join(converted[:4])
+    result = re.sub(r'[。、]{2,}', '。', result).strip('。、 ') + '。'
+    if len(result) > 250:
+        result = result[:250] + '。以上'
+    return result
+
+
+def _clean_english_residue(text):
+    """Remove English noise, keep Japanese and key translated terms"""
+    _terms = {
+        'file': 'ファイル', 'function': '関数', 'method': 'メソッド',
+        'class': 'クラス', 'variable': '変数', 'config': '設定',
+        'check': '確認', 'test': 'テスト', 'error': 'エラー',
+        'install': 'インストール', 'clone': 'クローン', 'search': '検索',
+        'build': 'ビルド', 'fix': '修正', 'update': '更新',
+        'create': '作成', 'delete': '削除', 'add': '追加',
+        'change': '変更', 'modify': '変更', 'read': '読み取り',
+        'write': '書き込み', 'edit': '編集', 'repository': 'リポジトリ',
+        'script': 'スクリプト', 'code': 'コード', 'process': 'プロセス',
+        'message': 'メッセージ', 'response': '応答', 'version': 'バージョン',
+        'command': 'コマンド', 'output': '出力', 'structure': '構造',
+        'data': 'データ', 'analyze': '分析', 'implement': '実装',
+    }
+    for en, jp in _terms.items():
+        text = re.sub(rf'\b{en}s?\b', jp, text, flags=re.IGNORECASE)
+    # Remove paths, long identifiers, URLs
+    text = re.sub(r'https?://\S+', '', text)
+    text = re.sub(r'[A-Za-z_][A-Za-z0-9_]{10,}', '', text)
+    text = re.sub(r'[/\\][A-Za-z0-9_.\\/-]{8,}', '', text)
+    # Remove common English stop words
+    text = re.sub(r'\b(the|a|an|is|are|was|were|be|it|its|of|in|on|at|to|for|with|from|by|as|or|and|but|not|this|that|my|your|we|they|I|me|do|does|has|have|had|will|would|can|could|may|if|then|so|just|also|about|into)\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b[a-zA-Z]{1,3}\b', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'[,;:]+', '、', text)
+    text = re.sub(r'[(){}[\]"\'`]+', '', text)
+    text = re.sub(r'[、。]{2,}', '。', text)
+    return text.strip(' 、。')
+
+
+def _file_type_label(filepath):
+    """Return human-friendly Japanese file type label from extension"""
+    ext = os.path.splitext(filepath)[1].lower() if filepath else ''
+    _ext_map = {
+        '.py': 'パイソンファイル', '.js': 'スクリプトファイル',
+        '.ts': 'スクリプトファイル', '.json': '設定ファイル',
+        '.md': 'ドキュメント', '.txt': 'テキストファイル',
+        '.log': 'ログファイル', '.yaml': '設定ファイル',
+        '.yml': '設定ファイル', '.toml': '設定ファイル',
+        '.html': 'ウェブページ', '.css': 'スタイルシート',
+        '.sh': 'シェルスクリプト', '.bat': 'バッチファイル',
+        '.csv': 'データファイル', '.xml': '設定ファイル',
+        '.jsonl': 'ログファイル', '.lock': 'ロックファイル',
+        '.pid': 'プロセスファイル', '.env': '環境設定',
+    }
+    return _ext_map.get(ext, 'ファイル')
+
+
+def process_tool_use_for_narration(tool_name, tool_input):
+    """Convert tool_use to one short Japanese sentence (v4.0)
+
+    No filenames or paths — just file type and action.
+    """
+    if not isinstance(tool_input, dict):
+        tool_input = {}
+
+    if tool_name == 'Bash':
+        cmd = tool_input.get('command', '')
+        if 'git ' in cmd:
+            return "ギットコマンドを実行します"
+        if 'pip ' in cmd:
+            return "パッケージをインストールします"
+        if 'python' in cmd:
+            return "スクリプトを実行します"
+        if 'curl' in cmd:
+            return "通信を行います"
+        if 'tasklist' in cmd or 'taskkill' in cmd:
+            return "プロセスを確認します"
+        if 'npm' in cmd or 'node' in cmd:
+            return "ノードコマンドを実行します"
+        return "コマンドを実行します"
+
+    if tool_name == 'Read':
+        fp = tool_input.get('file_path', '')
+        label = _file_type_label(fp)
+        return f"{label}を読み取ります"
+
+    if tool_name == 'Write':
+        fp = tool_input.get('file_path', '')
+        label = _file_type_label(fp)
+        return f"{label}を作成します"
+
+    if tool_name == 'Edit':
+        fp = tool_input.get('file_path', '')
+        label = _file_type_label(fp)
+        return f"{label}を編集します"
+
+    if tool_name == 'Glob':
+        return "ファイルを検索します"
+
+    if tool_name == 'Grep':
+        return "コード内を検索します"
+
+    if tool_name == 'Agent':
+        return "サブエージェントを起動します"
+
+    if tool_name == 'TodoWrite':
+        return "タスクリストを更新します"
+
+    if tool_name == 'WebSearch':
+        return "ウェブを検索します"
+
+    if tool_name == 'WebFetch':
+        return "ウェブページを取得します"
+
+    if 'notion' in tool_name.lower():
+        return "ノーションにアクセスします"
+
+    if 'gmail' in tool_name.lower():
+        return "メールを確認します"
+
+    if 'preview' in tool_name.lower():
+        return "プレビューを操作します"
+
+    return "ツールを実行します"
 
 def process_text_for_narration(text):
-    """Convert text for natural narration experience (v3.1.5 enhanced)"""
+    """Convert text for natural narration experience (v4.0: enhanced Japanese)"""
     # Process code blocks with surrounding whitespace
-    # This prevents awkward punctuation around code blocks
     text = re.sub(r'\n*```[\s\S]*?```\n*', '。コード部分があります。', text)
-    
-    # Convert file paths to Japanese (more natural patterns)
-    # Simplify long paths
-    text = re.sub(r'C:\\Users\\[^\\]+\\Documents\\[^\\]+\\[^\\]+\\([^\s\\]+)', 
-                  r'プロジェクト内の\1', text)
-    text = re.sub(r'C:\\Users\\[^\\]+\\([^\s]+)', 
-                  r'ユーザーフォルダの\1', text)
-    
+
+    # v4.0: Remove inline code backticks and clean their contents
+    # Long code fragments -> just say "コード"
+    text = re.sub(r'`[^`]{40,}`', 'コード部分', text)
+    # Short inline code -> remove backticks, let term replacement handle it
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+
+    # v4.0: Remove URLs
+    text = re.sub(r'https?://\S+', '', text)
+
+    # v4.0: Remove file paths entirely (user requested no filenames/dirs)
+    text = re.sub(r'[A-Z]:\\[^\s,。、]+', '', text)
+    text = re.sub(r'/[a-z][^\s,。、]{5,}', '', text)
+
+    # v4.0: Apply term dictionary BEFORE identifier removal
+    # so known English words get translated instead of deleted
+    _early_replacements = {
+        'operation': '操作', 'enqueue': 'エンキュー', 'Desktop': 'デスクトップ',
+        'function': '関数', 'variable': '変数', 'parameter': 'パラメーター',
+        'argument': '引数', 'callback': 'コールバック', 'listener': 'リスナー',
+        'handler': 'ハンドラー', 'generate': '生成', 'process': 'プロセス',
+        'monitor': 'モニター', 'session': 'セッション', 'message': 'メッセージ',
+        'response': '応答', 'narration': '読み上げ', 'thinking': '思考',
+        'assistant': 'アシスタント', 'permission': '許可', 'detection': '検出',
+        'duplicate': '重複', 'prevention': '防止', 'processing': '処理',
+        'monitoring': '監視', 'switching': '切り替え', 'connection': '接続',
+        'compatible': '互換', 'compatibility': '互換性',
+        'notification': '通知', 'confirmation': '確認',
+        'initialize': '初期化', 'configure': '設定', 'implement': '実装',
+        'replacement': '置換', 'conversion': '変換',
+    }
+    for old, new in _early_replacements.items():
+        # Use lookaround that works with Japanese characters (not just \b)
+        text = re.sub(rf'(?<![a-zA-Z]){old}(?![a-zA-Z])', new, text, flags=re.IGNORECASE)
+
+    # v4.0: Remove standalone English identifiers (snake_case, camelCase)
+    text = re.sub(r'\b[a-z_][a-z0-9_]{8,}\b', '', text)
+    text = re.sub(r'\b[a-z]+[A-Z][a-zA-Z]+\b', '', text)
+
     # Convert file extensions to Japanese (more natural)
     text = re.sub(r'(\w+)\.py\b', r'\1ファイル', text)
     text = re.sub(r'(\w+)\.js\b', r'\1スクリプト', text)
@@ -510,12 +707,16 @@ def process_text_for_narration(text):
         'API': 'エーピーアイ',
         'URL': 'アドレス',
         'JSON': 'ジェイソン',
+        'JSONL': 'ジェイソンエル',
         'HTML': 'エイチティーエムエル',
         'CSS': 'スタイルシート',
         'CLI': 'コマンドライン',
+        'Desktop': 'デスクトップ',
         'ID': 'アイディー',
+        'PID': 'プロセスアイディー',
         'OK': 'オーケー',
         'NG': 'エヌジー',
+        'FIFO': 'ファイフォ',
         # Common development terms
         'error': 'エラー',
         'warning': '警告',
@@ -530,12 +731,115 @@ def process_text_for_narration(text):
         'folder': 'フォルダ',
         'update': '更新',
         'create': '作成',
-        'delete': '削除',
+        'delete': '削��',
+        'edit': '編集',
+        'read': '読み取り',
+        'write': '書き込み',
+        'install': 'インストール',
+        'clone': 'クローン',
+        'process': 'プロセス',
+        'queue': 'キュー',
+        'operation': '操作',
+        'message': 'メッセージ',
+        'role': 'ロール',
+        'content': 'コンテンツ',
+        'assistant': 'アシスタント',
+        'user': 'ユーザー',
+        'tool': 'ツール',
+        'result': '結果',
+        'type': 'タイプ',
+        'thinking': '思考',
+        'narration': '読み上げ',
+        'volume': '音量',
+        'script': 'スクリプト',
+        'code': 'コード',
+        'version': 'バージョン',
+        'config': '設定',
+        'log': 'ログ',
+        'path': 'パス',
+        'pattern': 'パターン',
+        'response': '応答',
+        'request': 'リクエスト',
+        'chars': '文字',
+        'string': '文字列',
+        'permission': '許可',
+        'denied': '拒否',
+        'rejected': '拒否',
+        'operation': '操作',
+        'enqueue': 'エンキュー',
+        'dequeue': 'デキュー',
+        'Desktop': 'デスクトップ',
+        'monitor': 'モニター',
+        'session': 'セッション',
+        'startup': 'スタートアップ',
+        'shutdown': 'シャットダウン',
+        'thread': 'スレッド',
+        'worker': 'ワーカー',
+        'timeout': 'タイムアウト',
+        'retry': 'リトライ',
+        'chunk': 'チャンク',
+        'hash': 'ハッシュ',
+        'token': 'トークン',
+        'parser': 'パーサー',
+        'plugin': 'プラグイン',
+        'callback': 'コールバック',
+        'input': '入力',
+        'output': '出力',
+        'function': '関数',
+        'method': 'メソッド',
+        'class': 'クラス',
+        'variable': '変数',
+        'parameter': 'パラメーター',
+        'argument': '引数',
+        'return': '戻り値',
+        'module': 'モジュール',
+        'import': 'インポート',
+        'export': 'エクスポート',
+        'test': 'テスト',
+        'build': 'ビルド',
+        'deploy': 'デプロイ',
+        'server': 'サーバー',
+        'client': 'クライアント',
+        'agent': 'エージェント',
+        'hook': 'フック',
+        'event': 'イベント',
+        'handler': 'ハンドラー',
+        'listener': 'リスナー',
+        'stream': 'ストリーム',
+        'buffer': 'バッファー',
+        'cache': 'キャッシュ',
+        'stack': 'スタック',
+        'queue': 'キュー',
+        'array': '配列',
+        'object': 'オブジェクト',
+        'null': 'ヌル',
+        'true': 'トゥルー',
+        'false': 'フォルス',
+        'status': 'ステータス',
+        'check': 'チェック',
+        'verify': '検証',
+        'validate': '検証',
+        'parse': '解析',
+        'render': 'レンダリング',
+        'compile': 'コンパイル',
+        'execute': '実行',
+        'launch': '起動',
+        'stop': '停止',
+        'start': '開始',
+        'run': '実行',
+        'running': '実行中',
+        'failed': '失敗',
+        'success': '成功',
+        'complete': '完了',
+        'pending': '保留中',
+        'active': 'アクティブ',
+        'enabled': '有効',
+        'disabled': '無効',
     }
     
-    # Apply replacements (case-insensitive for all terms)
+    # Apply replacements (case-insensitive, JP-boundary-aware)
     for old, new in replacements.items():
-        text = re.sub(rf'\b{old}\b', new, text, flags=re.IGNORECASE)
+        text = re.sub(rf'(?<![a-zA-Z]){old}(?![a-zA-Z])', new, text, flags=re.IGNORECASE)
     
     # v3.1.6: Convert uppercase alphabet sequences to katakana
     # This handles acronyms not in the dictionary
@@ -559,14 +863,22 @@ def process_text_for_narration(text):
     
     # Convert sequences of 2 or more uppercase letters
     text = re.sub(r'\b[A-Z]{2,}\b', convert_uppercase_to_katakana, text)
-    
+
+    # v4.0: Remove remaining English words that weren't in the dictionary
+    # Remove isolated English words (4+ chars remaining after replacements)
+    text = re.sub(r'\b[a-zA-Z]{4,}\b', '', text)
+    # Remove very short leftovers (1-3 letter English fragments)
+    text = re.sub(r'(?<![ァ-ヶー])\b[a-zA-Z]{1,3}\b(?![ァ-ヶー])', '', text)
+
     # Clean up consecutive punctuation
     text = re.sub(r'。+', '。', text)  # Multiple periods to single
     text = re.sub(r'、+', '、', text)  # Multiple commas to single
     text = re.sub(r'。、', '。', text)  # Period followed by comma to just period
     text = re.sub(r'、。', '。', text)  # Comma followed by period to just period
     text = re.sub(r'\s+', ' ', text)
-    
+    # Remove leading/trailing punctuation artifacts
+    text = re.sub(r'^[、。\s]+', '', text)
+
     return text.strip()
 
 def test_voice_system():
@@ -618,36 +930,44 @@ def test_voice_system():
 def generate_message_id(data):
     """Generate unique message ID"""
     key_parts = []
-    
+
     if 'message' in data:
         msg = data['message']
         content_str = str(msg.get('content', ''))[:100]
         key_parts.append(content_str)
         key_parts.append(msg.get('role', ''))
-    
+
+    # queue-operation support
+    if data.get('type') == 'queue-operation':
+        key_parts.append(data.get('operation', ''))
+        key_parts.append(str(data.get('content', ''))[:50])
+
     # Add timestamp if available
     if 'timestamp' in data:
         key_parts.append(str(data['timestamp']))
-    
+
     id_str = '_'.join(filter(None, key_parts))
     return hashlib.md5(id_str.encode()).hexdigest()[:16]
 
 def find_latest_jsonl():
-    """Find the latest JSONL file"""
+    """Find the latest JSONL file (excludes subagent files)"""
     patterns = [
         r"C:\Users\liuco\.claude\projects\**\*.jsonl",
         r"C:\Users\*\.claude\projects\**\*.jsonl"
     ]
-    
+
     all_files = []
     for pattern in patterns:
         files = glob(pattern, recursive=True)
         all_files.extend(files)
-    
+
+    # Exclude subagent JSONL files to avoid duplicate reading
+    all_files = [f for f in all_files if 'subagents' not in f]
+
     if not all_files:
         logger.error("JSONL file not found")
         return None
-    
+
     latest = max(all_files, key=lambda x: os.path.getmtime(x))
     logger.info(f"Found JSONL: {latest}")
     return latest
@@ -701,14 +1021,14 @@ def monitor_and_speak():
         logger.error("No JSONL file found at startup")
         return
     
-    # Initialize known files with all existing files
+    # Initialize known files with all existing files (exclude subagents)
     patterns = [
         r"C:\Users\liuco\.claude\projects\**\*.jsonl",
         r"C:\Users\*\.claude\projects\**\*.jsonl"
     ]
     for pattern in patterns:
         files = glob(pattern, recursive=True)
-        known_files.update(files)
+        known_files.update(f for f in files if 'subagents' not in f)
     
     logger.info(f"[Monitor] Initial file: {os.path.basename(current_file)}")
     logger.info(f"[Monitor] Tracking {len(known_files)} existing JSONL files")
@@ -729,7 +1049,7 @@ def monitor_and_speak():
             # Periodic new session check (v3.2.0: only detect truly new files)
             now = time.time()
             if now - last_check > CHECK_INTERVAL:
-                # Find all current JSONL files
+                # Find all current JSONL files (exclude subagents)
                 patterns = [
                     r"C:\Users\liuco\.claude\projects\**\*.jsonl",
                     r"C:\Users\*\.claude\projects\**\*.jsonl"
@@ -737,7 +1057,7 @@ def monitor_and_speak():
                 all_current_files = set()
                 for pattern in patterns:
                     files = glob(pattern, recursive=True)
-                    all_current_files.update(files)
+                    all_current_files.update(f for f in files if 'subagents' not in f)
                 
                 # Check for truly new files (not in known_files)
                 new_files = all_current_files - known_files
@@ -845,22 +1165,51 @@ def monitor_and_speak():
                         continue
                     
                     _processed_messages.append(msg_id)
-                    
-                    # Process assistant messages and thinking
+
+                    # --- v4.0: User input confirmation ---
+                    if data.get('type') == 'queue-operation' and data.get('operation') == 'enqueue':
+                        user_content = data.get('content', '')
+                        if user_content and isinstance(user_content, str) and not user_content.startswith('<'):
+                            logger.info("[UserInput] User message received")
+                            enqueue_speech_simple("受け取りました。", speed=NARRATION_SPEED_NORMAL, volume=VOLUME_THINKING)
+                        continue
+
+                    # Process assistant and user messages
                     if 'message' in data:
                         msg = data['message']
+
+                        # --- v4.0: User role - detect human input & permission responses ---
+                        if msg.get('role') == 'user':
+                            content = msg.get('content', '')
+
+                            # Human-typed message (string content, not tool_result)
+                            if isinstance(content, str) and len(content) > 3:
+                                # Already handled by queue-operation above
+                                pass
+
+                            # Tool results - check for permission denied
+                            if isinstance(content, list):
+                                for item in content:
+                                    if isinstance(item, dict) and item.get('type') == 'tool_result':
+                                        result_text = str(item.get('content', ''))
+                                        if "doesn't want to proceed" in result_text or 'rejected' in result_text.lower():
+                                            logger.info("[Permission] User denied tool use")
+                                            enqueue_speech_simple("ユーザーが操作を拒否しました。", speed=NARRATION_SPEED_NORMAL, volume=VOLUME_NORMAL)
+                            continue
+
+                        # --- Assistant messages ---
                         if msg.get('role') == 'assistant':
                             content = msg.get('content', [])
-                            
+
                             logger.info("[Assistant] Response detected")
-                            
+
                             full_text = ""
                             for item in content:
                                 if isinstance(item, dict):
                                     text = item.get('text', '')
                                     if text:
                                         full_text += text
-                            
+
                             # Check for thinking content
                             thinking_text = ""
                             for item in content:
@@ -869,21 +1218,30 @@ def monitor_and_speak():
                                         thinking = item.get('thinking', '')
                                         if thinking:
                                             thinking_text += thinking
-                            
-                            # Process thinking if found (v3.1.4: with reduced volume)
+
+                            # Process thinking if found
                             if thinking_text.strip():
                                 thinking_narration = process_thinking_for_narration(thinking_text)
                                 if thinking_narration:
-                                    logger.info(f"[Thinking] Detected thinking: {len(thinking_narration)} chars (volume: {VOLUME_THINKING})")
+                                    logger.info(f"[Thinking] {len(thinking_narration)} chars")
                                     enqueue_speech_simple(thinking_narration, speed=NARRATION_SPEED_THINKING, volume=VOLUME_THINKING)
-                            
-                            # Process regular text (v3.1.4: with normal volume)
+
+                            # v4.0: Tool use narration with permission awareness
+                            for item in content:
+                                if isinstance(item, dict) and item.get('type') == 'tool_use':
+                                    tool_narration = process_tool_use_for_narration(
+                                        item.get('name', ''),
+                                        item.get('input', {})
+                                    )
+                                    if tool_narration:
+                                        logger.info(f"[ToolUse] {item.get('name', '')}: {tool_narration}")
+                                        enqueue_speech_simple(tool_narration, speed=NARRATION_SPEED_THINKING, volume=VOLUME_THINKING)
+
+                            # Process regular text
                             if full_text.strip():
-                                # Convert full text for narration
                                 narration_text = process_text_for_narration(full_text)
-                                logger.info(f"[Assistant] Full text reading: {len(narration_text)} chars (volume: {VOLUME_NORMAL})")
-                                
-                                # Add to queue with normal narration speed and volume
+                                logger.info(f"[Assistant] Full text: {len(narration_text)} chars")
+
                                 enqueue_speech_simple(narration_text, speed=NARRATION_SPEED_NORMAL, volume=VOLUME_NORMAL)
                     
                 except json.JSONDecodeError:
