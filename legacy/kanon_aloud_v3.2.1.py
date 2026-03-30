@@ -633,8 +633,7 @@ def generate_message_id(data):
 def find_latest_jsonl():
     """Find the latest JSONL file"""
     patterns = [
-        r"C:\Users\liuco\.claude\projects\**\*.jsonl",
-        r"C:\Users\*\.claude\projects\**\*.jsonl"
+        str(Path.home() / '.claude' / 'projects' / '**' / '*.jsonl'),
     ]
     
     all_files = []
@@ -701,8 +700,7 @@ def monitor_and_speak():
     
     # Initialize known files with all existing files
     patterns = [
-        r"C:\Users\liuco\.claude\projects\**\*.jsonl",
-        r"C:\Users\*\.claude\projects\**\*.jsonl"
+        str(Path.home() / '.claude' / 'projects' / '**' / '*.jsonl'),
     ]
     for pattern in patterns:
         files = glob(pattern, recursive=True)
@@ -729,8 +727,7 @@ def monitor_and_speak():
             if now - last_check > CHECK_INTERVAL:
                 # Find all current JSONL files
                 patterns = [
-                    r"C:\Users\liuco\.claude\projects\**\*.jsonl",
-                    r"C:\Users\*\.claude\projects\**\*.jsonl"
+                    str(Path.home() / '.claude' / 'projects' / '**' / '*.jsonl'),
                 ]
                 all_current_files = set()
                 for pattern in patterns:

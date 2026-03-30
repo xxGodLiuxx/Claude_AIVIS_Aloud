@@ -58,6 +58,7 @@ _processed_messages = deque(maxlen=100)  # Duplicate prevention
 _speech_queue = queue.Queue()  # Simple FIFO queue
 _speech_thread = None
 _stop_flag = threading.Event()
+_cancel_current = threading.Event()  # v4.0: Cancel low-priority speech when normal text arrives
 _max_runtime = 3600 * 24  # 24 hours max runtime
 _start_time = None
 
@@ -194,57 +195,83 @@ def cleanup_duplicate_processes():
 # ===============================
 def speech_worker_simple():
     """
-    Simple speech worker: Process messages in order (FIFO)
+    Speech worker with cancel support (v4.0)
+    Low-volume speech (thinking/tool) is cancelled when normal text arrives.
     """
     import io
-    
+
     pygame.mixer.init(frequency=24000, size=-16, channels=1)
-    
-    logger.info("[SpeechWorker] Simple worker started (v3.2.0)")
-    
+
+    logger.info("[SpeechWorker] Worker started (v4.0 with cancel support)")
+
     while not _stop_flag.is_set():
         try:
-            # Get from simple queue
             item = _speech_queue.get(timeout=1.0)
-            
+
             if item is None:  # Termination signal
                 break
-            
-            # v3.1.4: Support volume parameter
+
             if len(item) == 3:
                 text, speed, volume = item
             else:
                 text, speed = item
                 volume = VOLUME_NORMAL
-            
-            logger.info(f"[SpeechWorker] Processing: {len(text)} chars (volume: {volume})")
-            
-            # Read all messages (no priority distinction)
+
+            is_low_priority = (volume < VOLUME_NORMAL)
+
+            # v4.0: If this is normal-volume text, cancel any in-progress low-priority speech
+            if not is_low_priority:
+                _cancel_current.set()
+                # Brief wait for current playback to stop
+                time.sleep(0.05)
+                pygame.mixer.stop()
+                _cancel_current.clear()
+                # Drain remaining low-priority items from queue
+                drained = 0
+                while not _speech_queue.empty():
+                    try:
+                        peek = _speech_queue.get_nowait()
+                        if peek is None:
+                            _speech_queue.put(None)  # Re-add termination signal
+                            break
+                        p_vol = peek[2] if len(peek) == 3 else VOLUME_NORMAL
+                        if p_vol >= VOLUME_NORMAL:
+                            # Keep normal-volume items — put back
+                            _speech_queue.put(peek)
+                            break
+                        drained += 1
+                        _speech_queue.task_done()
+                    except queue.Empty:
+                        break
+                if drained > 0:
+                    logger.info(f"[SpeechWorker] Cancelled {drained} low-priority items")
+
+            logger.info(f"[SpeechWorker] Processing: {len(text)} chars (vol:{volume})")
+
             if len(text) > AIVIS_MAX_LENGTH:
                 chunks = split_text_naturally(text, AIVIS_OPTIMAL_LENGTH)
-                logger.info(f"[SpeechWorker] Split into {len(chunks)} parts")
-                
+
                 for i, chunk in enumerate(chunks, 1):
                     if _stop_flag.is_set():
                         break
-                    
-                    logger.info(f"[SpeechWorker] Part {i}/{len(chunks)}: {len(chunk)} chars")
-                    success = speak_single_chunk(chunk, speed, volume)
-                    
-                    if success and i < len(chunks):
-                        # Natural pause based on content
+                    # v4.0: Cancel low-priority speech if signalled
+                    if is_low_priority and _cancel_current.is_set():
+                        logger.info("[SpeechWorker] Low-priority speech cancelled")
+                        break
+
+                    speak_single_chunk(chunk, speed, volume)
+
+                    if i < len(chunks):
                         if '。。' in chunk:
                             time.sleep(NARRATION_PAUSE_PARAGRAPH)
                         else:
                             time.sleep(NARRATION_PAUSE_SENTENCE)
             else:
-                # Normal reading
                 speak_single_chunk(text, speed, volume)
-            
-            logger.info(f"[SpeechWorker] Reading completed")
-            
+
+            logger.info("[SpeechWorker] Reading completed")
             _speech_queue.task_done()
-            
+
         except queue.Empty:
             continue
         except Exception as e:
@@ -252,7 +279,7 @@ def speech_worker_simple():
             try:
                 _speech_queue.task_done()
             except ValueError:
-                pass  # Ignore task_done errors
+                pass
 
 def speak_single_chunk(text, speed, volume=1.0):
     """
@@ -288,10 +315,12 @@ def speak_single_chunk(text, speed, volume=1.0):
             sound = pygame.mixer.Sound(audio_data)
             channel = sound.play()
             
-            # Wait until finished reading
+            # Wait until finished reading (v4.0: also check cancel signal)
             if channel:
-                while channel.get_busy() and not _stop_flag.is_set():
+                while channel.get_busy() and not _stop_flag.is_set() and not _cancel_current.is_set():
                     pygame.time.wait(10)
+                if _cancel_current.is_set() and channel.get_busy():
+                    channel.stop()
             
             return True
         else:
@@ -952,8 +981,7 @@ def generate_message_id(data):
 def find_latest_jsonl():
     """Find the latest JSONL file (excludes subagent files)"""
     patterns = [
-        r"C:\Users\liuco\.claude\projects\**\*.jsonl",
-        r"C:\Users\*\.claude\projects\**\*.jsonl"
+        str(Path.home() / '.claude' / 'projects' / '**' / '*.jsonl'),
     ]
 
     all_files = []
@@ -1023,8 +1051,7 @@ def monitor_and_speak():
     
     # Initialize known files with all existing files (exclude subagents)
     patterns = [
-        r"C:\Users\liuco\.claude\projects\**\*.jsonl",
-        r"C:\Users\*\.claude\projects\**\*.jsonl"
+        str(Path.home() / '.claude' / 'projects' / '**' / '*.jsonl'),
     ]
     for pattern in patterns:
         files = glob(pattern, recursive=True)
@@ -1051,8 +1078,7 @@ def monitor_and_speak():
             if now - last_check > CHECK_INTERVAL:
                 # Find all current JSONL files (exclude subagents)
                 patterns = [
-                    r"C:\Users\liuco\.claude\projects\**\*.jsonl",
-                    r"C:\Users\*\.claude\projects\**\*.jsonl"
+                    str(Path.home() / '.claude' / 'projects' / '**' / '*.jsonl'),
                 ]
                 all_current_files = set()
                 for pattern in patterns:
