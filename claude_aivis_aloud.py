@@ -429,12 +429,17 @@ def split_text_naturally(text, max_length=AIVIS_OPTIMAL_LENGTH):
     return chunks
 
 def process_thinking_for_narration(thinking_text):
-    """Convert thinking to natural Japanese summary (v4.0)"""
+    """Convert thinking to clean Japanese narration (v4.1)
+
+    Strategy:
+    - If mostly Japanese: light cleanup, return as-is
+    - If mostly English: translate key sentences, strip all remaining English
+    """
     text = thinking_text.strip()
     if not text:
         return None
 
-    # Japanese ratio check
+    # Japanese character count
     jp_chars = re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', text)
     jp_ratio = len(jp_chars) / max(len(text), 1)
 
@@ -448,91 +453,52 @@ def process_thinking_for_narration(thinking_text):
         text = re.sub(r'^[\-•·*]\s*', '', text, flags=re.MULTILINE)
         text = re.sub(r'\n+', '、', text)
         text = re.sub(r'\s+', ' ', text)
+        # Remove remaining short English
+        text = re.sub(r'\b[a-zA-Z]{1,5}\b', '', text)
         text = re.sub(r'[、。]{2,}', '。', text)
         text = text.strip('、。 ')
-        if len(text) > 200:
-            text = text[:200] + '。以上'
+        if len(text) > 150:
+            text = text[:150]
         return text if text else None
 
-    # English thinking -> Japanese summary
+    # English thinking -> extract intent as Japanese
     lines = [l.strip() for l in text.split('\n') if l.strip()]
 
-    _en_jp = [
-        (r"(?i)the user wants?(?: me)? to\s+(.+)", r"ユーザーの依頼は、\1"),
-        (r"(?i)i need to\s+(.+)", r"\1が必要です"),
-        (r"(?i)i should\s+(.+)", r"\1するべきですね"),
-        (r"(?i)let me (?:check|look at|examine|verify)\s+(.+)", r"\1を確認します"),
-        (r"(?i)let me (?:think|consider)\s*(.*)$", r"考えてみます。\1"),
-        (r"(?i)(?:first|next),?\s*(?:i(?:'ll| will| need to| should))?\s*(.+)", r"まず、\1"),
-        (r"(?i)(?:now|then),?\s*(?:i(?:'ll| will| need to| should))?\s*(.+)", r"次に、\1"),
-        (r"(?i)the (?:issue|problem|bug) is\s+(.+)", r"問題は、\1"),
-        (r"(?i)this (?:means|indicates|suggests)\s+(.+)", r"つまり、\1"),
-        (r"(?i)i(?:'ll| will) (?:try|attempt) to\s+(.+)", r"\1を試みます"),
-        (r"(?i)looking at\s+(.+)", r"\1を見ています"),
-        (r"(?i)i can see (?:that\s+)?(.+)", r"\1が分かりました"),
-        (r"(?i)(?:so|therefore),?\s+(.+)", r"したがって、\1"),
+    # Sentence-level English->Japanese patterns
+    _patterns = [
+        (r"(?i)the user (?:wants?|is asking|asked)(?: me)? to\s+(.+)", "ユーザーの依頼"),
+        (r"(?i)i need to\s+(.+)", "必要な作業あり"),
+        (r"(?i)i should\s+(.+)", "方針を検討中"),
+        (r"(?i)let me (?:check|look|examine|verify|confirm)\b", "確認中"),
+        (r"(?i)let me (?:think|consider)\b", "考え中"),
+        (r"(?i)(?:first|next),?\s", "手順を整理中"),
+        (r"(?i)the (?:issue|problem|bug|error) is\b", "問題を特定中"),
+        (r"(?i)this (?:means|indicates|suggests)\b", "分析中"),
+        (r"(?i)i(?:'ll| will) (?:try|attempt)\b", "試行中"),
+        (r"(?i)looking at\b", "調査中"),
+        (r"(?i)i can see\b", "把握しました"),
+        (r"(?i)(?:so|therefore|in summary),?\s", "まとめ中"),
+        (r"(?i)(?:done|complete|finished)\b", "完了"),
+        (r"(?i)(?:fix|修正|update|更新)\b", "修正を検討中"),
+        (r"(?i)(?:now|then)\s+(?:i|let)\b", "次の手順へ"),
     ]
 
-    converted = []
-    for line in lines[:8]:
-        if re.match(r'^[\s{}\[\]<>/\\|`]', line):
-            continue
-        if len(re.findall(r'[/\\{}()\[\]<>]', line)) > 4:
-            continue
-        matched = False
-        for pat, repl in _en_jp:
-            if re.match(pat, line):
-                c = re.sub(pat, repl, line)
-                c = _clean_english_residue(c)
-                if c and len(c) > 2:
-                    converted.append(c)
-                matched = True
+    # Extract unique Japanese action labels from patterns that match
+    actions = []
+    seen = set()
+    for line in lines[:15]:
+        for pat, action_jp in _patterns:
+            if re.search(pat, line) and action_jp not in seen:
+                actions.append(action_jp)
+                seen.add(action_jp)
                 break
-        if not matched:
-            c = _clean_english_residue(line)
-            if c and len(c) > 2:
-                converted.append(c)
 
-    if not converted:
-        return None
+    if not actions:
+        return "考え中"
 
-    result = '。'.join(converted[:4])
-    result = re.sub(r'[。、]{2,}', '。', result).strip('。、 ') + '。'
-    if len(result) > 250:
-        result = result[:250] + '。以上'
+    # Join unique actions, max 3
+    result = '。'.join(actions[:3])
     return result
-
-
-def _clean_english_residue(text):
-    """Remove English noise, keep Japanese and key translated terms"""
-    _terms = {
-        'file': 'ファイル', 'function': '関数', 'method': 'メソッド',
-        'class': 'クラス', 'variable': '変数', 'config': '設定',
-        'check': '確認', 'test': 'テスト', 'error': 'エラー',
-        'install': 'インストール', 'clone': 'クローン', 'search': '検索',
-        'build': 'ビルド', 'fix': '修正', 'update': '更新',
-        'create': '作成', 'delete': '削除', 'add': '追加',
-        'change': '変更', 'modify': '変更', 'read': '読み取り',
-        'write': '書き込み', 'edit': '編集', 'repository': 'リポジトリ',
-        'script': 'スクリプト', 'code': 'コード', 'process': 'プロセス',
-        'message': 'メッセージ', 'response': '応答', 'version': 'バージョン',
-        'command': 'コマンド', 'output': '出力', 'structure': '構造',
-        'data': 'データ', 'analyze': '分析', 'implement': '実装',
-    }
-    for en, jp in _terms.items():
-        text = re.sub(rf'\b{en}s?\b', jp, text, flags=re.IGNORECASE)
-    # Remove paths, long identifiers, URLs
-    text = re.sub(r'https?://\S+', '', text)
-    text = re.sub(r'[A-Za-z_][A-Za-z0-9_]{10,}', '', text)
-    text = re.sub(r'[/\\][A-Za-z0-9_.\\/-]{8,}', '', text)
-    # Remove common English stop words
-    text = re.sub(r'\b(the|a|an|is|are|was|were|be|it|its|of|in|on|at|to|for|with|from|by|as|or|and|but|not|this|that|my|your|we|they|I|me|do|does|has|have|had|will|would|can|could|may|if|then|so|just|also|about|into)\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b[a-zA-Z]{1,3}\b', '', text)
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'[,;:]+', '、', text)
-    text = re.sub(r'[(){}[\]"\'`]+', '', text)
-    text = re.sub(r'[、。]{2,}', '。', text)
-    return text.strip(' 、。')
 
 
 def _file_type_label(filepath):
@@ -553,71 +519,150 @@ def _file_type_label(filepath):
     return _ext_map.get(ext, 'ファイル')
 
 
-def process_tool_use_for_narration(tool_name, tool_input):
-    """Convert tool_use to one short Japanese sentence (v4.0)
+def _desc_to_japanese(desc):
+    """Convert English description keyword to concise Japanese action phrase"""
+    if not desc:
+        return None
+    d = desc.lower().strip()
+    # Keyword-based mapping for common description patterns
+    _kw = [
+        (['clone'], 'リポジトリをクローン'),
+        (['install', 'pip', 'npm', 'package'], 'パッケージをインストール'),
+        (['push'], 'リモートにプッシュ'),
+        (['pull'], 'リモートからプル'),
+        (['commit'], 'コミットを作成'),
+        (['merge'], 'ブランチをマージ'),
+        (['checkout', 'switch branch'], 'ブランチを切り替え'),
+        (['diff'], '差分を確認'),
+        (['log', 'history'], '履歴を確認'),
+        (['status'], 'ステータスを確認'),
+        (['start', 'launch', 'run', 'restart'], 'プロセスを起動'),
+        (['stop', 'kill', 'terminate'], 'プロセスを停止'),
+        (['verify', 'check', 'confirm', 'validate'], '確認'),
+        (['test'], 'テストを実行'),
+        (['build', 'compile'], 'ビルドを実行'),
+        (['search', 'find', 'scan', 'grep'], '検索'),
+        (['list'], '一覧を取得'),
+        (['save', 'write', 'create', 'generate'], '保存'),
+        (['read', 'load', 'fetch', 'get'], '読み込み'),
+        (['update', 'modify', 'edit', 'fix', 'patch'], '更新'),
+        (['delete', 'remove', 'clean'], '削除'),
+        (['debug'], 'デバッグ'),
+        (['deploy'], 'デプロイ'),
+        (['auth'], '認証を確認'),
+        (['privacy'], 'プライバシーを確認'),
+        (['format'], 'フォーマットを整理'),
+    ]
+    for keywords, jp in _kw:
+        if any(kw in d for kw in keywords):
+            return jp
+    return None
 
-    No filenames or paths — just file type and action.
+
+def process_tool_use_for_narration(tool_name, tool_input):
+    """Convert tool_use to specific, concise Japanese (v4.1)
+
+    No filenames or paths. Use description when available for specificity.
     """
     if not isinstance(tool_input, dict):
         tool_input = {}
 
+    desc = tool_input.get('description', '')
+
     if tool_name == 'Bash':
         cmd = tool_input.get('command', '')
+        # Try description first for specificity
+        jp_desc = _desc_to_japanese(desc)
+        if jp_desc:
+            return jp_desc
+        # Fallback: infer from command content
+        if 'git push' in cmd:
+            return "リモートにプッシュ"
+        if 'git pull' in cmd:
+            return "リモートからプル"
+        if 'git commit' in cmd or 'git add' in cmd:
+            return "コミットを作成"
+        if 'git diff' in cmd:
+            return "差分を確認"
+        if 'git log' in cmd:
+            return "履歴を確認"
+        if 'git status' in cmd:
+            return "ステータスを確認"
+        if 'git clone' in cmd:
+            return "リポジトリをクローン"
         if 'git ' in cmd:
-            return "ギットコマンドを実行します"
+            return "ギット操作を実行"
         if 'pip ' in cmd:
-            return "パッケージをインストールします"
-        if 'python' in cmd:
-            return "スクリプトを実行します"
-        if 'curl' in cmd:
-            return "通信を行います"
-        if 'tasklist' in cmd or 'taskkill' in cmd:
-            return "プロセスを確認します"
-        if 'npm' in cmd or 'node' in cmd:
-            return "ノードコマンドを実行します"
-        return "コマンドを実行します"
+            return "パッケージをインストール"
+        if 'npm ' in cmd or 'yarn ' in cmd:
+            return "パッケージをインストール"
+        if 'grep ' in cmd or 'findstr' in cmd:
+            return "テキストを検索"
+        if 'taskkill' in cmd or 'kill ' in cmd:
+            return "プロセスを停止"
+        if 'tasklist' in cmd or 'ps ' in cmd:
+            return "プロセスを確認"
+        if 'curl ' in cmd or 'wget ' in cmd:
+            return "ネットワーク通信"
+        if 'python' in cmd or 'node ' in cmd:
+            return "スクリプトを実行"
+        if 'ls ' in cmd or 'dir ' in cmd:
+            return "ファイル一覧を取得"
+        if 'cat ' in cmd or 'head ' in cmd or 'tail ' in cmd:
+            return "ファイルを確認"
+        if 'mkdir ' in cmd:
+            return "フォルダを作成"
+        if 'rm ' in cmd or 'del ' in cmd:
+            return "ファイルを削除"
+        if 'cp ' in cmd or 'mv ' in cmd:
+            return "ファイルを移動"
+        if 'sleep ' in cmd:
+            return "待機中"
+        if 'gh ' in cmd:
+            return "ギットハブ操作"
+        return "コマンドを実行"
 
     if tool_name == 'Read':
         fp = tool_input.get('file_path', '')
-        label = _file_type_label(fp)
-        return f"{label}を読み取ります"
+        return f"{_file_type_label(fp)}を読み取り"
 
     if tool_name == 'Write':
         fp = tool_input.get('file_path', '')
-        label = _file_type_label(fp)
-        return f"{label}を作成します"
+        return f"{_file_type_label(fp)}を作成"
 
     if tool_name == 'Edit':
         fp = tool_input.get('file_path', '')
-        label = _file_type_label(fp)
-        return f"{label}を編集します"
+        return f"{_file_type_label(fp)}を編集"
 
     if tool_name == 'Glob':
-        return "ファイルを検索します"
+        return "ファイルを検索"
 
     if tool_name == 'Grep':
-        return "コード内を検索します"
+        return "コード内を検索"
 
     if tool_name == 'Agent':
-        return "サブエージェントを起動します"
+        return "サブエージェントを起動"
 
     if tool_name == 'TodoWrite':
-        return "タスクリストを更新します"
+        return "タスクを更新"
+
+    if tool_name == 'Skill':
+        return "スキルを実行"
 
     if tool_name == 'WebSearch':
-        return "ウェブを検索します"
+        return "ウェブを検索"
 
     if tool_name == 'WebFetch':
-        return "ウェブページを取得します"
+        return "ウェブページを取得"
 
     if 'notion' in tool_name.lower():
-        return "ノーションにアクセスします"
+        return "ノーションにアクセス"
 
     if 'gmail' in tool_name.lower():
-        return "メールを確認します"
+        return "メールを確認"
 
     if 'preview' in tool_name.lower():
-        return "プレビューを操作します"
+        return "プレビューを操作"
 
     return "ツールを実行します"
 
