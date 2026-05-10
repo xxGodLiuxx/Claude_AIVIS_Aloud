@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude AIVIS Aloud v4.0.0
+Claude AIVIS Aloud v4.1.1
 Claude Code Desktop support with full Japanese narration
 - Tool use, thinking, user input confirmation in natural Japanese
 - Volume: Normal 0.3, Thinking/Tool 0.1
 - Subagent JSONL exclusion, 100+ term dictionary
+v4.1 (2026-03-30): Specific tool narration + clean thinking summaries
+v4.1.1 (2026-05-10): Race-free singleton lock — replaces "kill rivals"
+                     approach to eliminate the brief audio-overlap window
+                     before the rival process was terminated.
 Based on v3.2.3
 """
 
@@ -140,55 +144,83 @@ def cleanup_at_exit():
         except Exception:
             pass  # Ignore PID file cleanup errors
 
-def cleanup_duplicate_processes():
-    """Terminate all existing kanon_aloud processes at startup"""
-    current_pid = os.getpid()
-    logger.info(f"[Cleanup] Current PID: {current_pid}")
-    
+def _is_pid_alive(pid):
+    """Check if a PID corresponds to a running process on Windows."""
     try:
-        # Use PowerShell command to detect duplicate processes
-        ps_command = """
-        Get-WmiObject Win32_Process | Where-Object {
-            $_.ProcessId -ne %d -and 
-            $_.Name -eq 'python.exe' -and 
-            ($_.CommandLine -like '*kanon_aloud*' -or $_.CommandLine -like '*claude_aivis_aloud*')
-        } | ForEach-Object { $_.ProcessId }
-        """ % current_pid
-        
         result = subprocess.run(
-            ['powershell', '-Command', ps_command],
+            ['tasklist', '/FI', f'PID eq {pid}', '/FO', 'CSV', '/NH'],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=3
         )
-        
-        if result.returncode == 0 and result.stdout.strip():
-            pids = result.stdout.strip().split()
-            for pid in pids:
-                try:
-                    os.kill(int(pid), 9)
-                    logger.info(f"[Cleanup] Terminated duplicate process: PID {pid}")
-                except (OSError, ValueError):
-                    pass  # Process already terminated
-        
-        # Clean up lock files
-        lock_file = Path.home() / '.claude' / 'kanon_aloud.lock'
-        pid_file = Path.home() / '.claude' / 'kanon_aloud.pid'
-        
-        if lock_file.exists():
-            lock_file.unlink()
-            logger.debug("[Cleanup] Removed lock file")
-        
-        if pid_file.exists():
-            pid_file.unlink()
-            logger.debug("[Cleanup] Removed PID file")
-        
-        # Create new PID file
-        pid_file.parent.mkdir(parents=True, exist_ok=True)
-        pid_file.write_text(str(current_pid))
-        
+        # tasklist outputs "INFO: No tasks ..." when PID not found
+        return str(pid) in result.stdout and 'No tasks' not in result.stdout
     except Exception as e:
-        logger.warning(f"[Cleanup] Error during cleanup: {e}")
+        logger.warning(f"[Singleton] PID check failed: {e}")
+        return False
+
+
+def _is_kanon_process(pid):
+    """Verify a PID actually belongs to a kanon process (avoid PID-reuse false positives)."""
+    try:
+        result = subprocess.run(
+            ['wmic', 'process', 'where', f'ProcessId={pid}', 'get', 'CommandLine', '/format:list'],
+            capture_output=True,
+            text=True,
+            timeout=3
+        )
+        cmd = result.stdout.lower()
+        return 'kanon_aloud' in cmd or 'claude_aivis_aloud' in cmd
+    except Exception:
+        return False
+
+
+def cleanup_duplicate_processes():
+    """Singleton lock acquisition.
+
+    If another live kanon process holds the PID lock, this instance exits cleanly.
+    Otherwise we claim the lock and proceed. This replaces the previous "kill rivals
+    and continue" behavior, which had a race window where two processes could
+    play audio simultaneously before one was killed.
+    """
+    current_pid = os.getpid()
+    logger.info(f"[Singleton] Current PID: {current_pid}")
+
+    pid_file = Path.home() / '.claude' / 'kanon_aloud.pid'
+    lock_file = Path.home() / '.claude' / 'kanon_aloud.lock'
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+
+    if pid_file.exists():
+        try:
+            existing_pid = int(pid_file.read_text().strip())
+            if existing_pid != current_pid and _is_pid_alive(existing_pid):
+                if _is_kanon_process(existing_pid):
+                    msg = f"[Singleton] kanon already running (PID {existing_pid}). Exiting."
+                    logger.info(msg)
+                    print(msg)
+                    print(f"[INFO] kanon は既に動作中です (PID {existing_pid})")
+                    print("[INFO] 重複起動を防ぐため、このプロセスは終了します")
+                    sys.exit(0)
+                else:
+                    logger.warning(
+                        f"[Singleton] PID {existing_pid} alive but not a kanon "
+                        f"process — treating as stale, claiming lock"
+                    )
+            else:
+                logger.info(f"[Singleton] Stale PID {existing_pid} (not alive), claiming lock")
+        except (ValueError, OSError) as e:
+            logger.warning(f"[Singleton] PID file read error, claiming lock: {e}")
+
+    # Stale lock cleanup (only after we've confirmed no live owner)
+    if lock_file.exists():
+        try:
+            lock_file.unlink()
+        except OSError:
+            pass
+
+    # Claim the lock
+    pid_file.write_text(str(current_pid))
+    logger.info(f"[Singleton] Lock acquired by PID {current_pid}")
 
 # ===============================
 # Speech worker (simplified)
@@ -1362,10 +1394,10 @@ def main():
     print(f"Voice test: {'Enabled' if DEBUG_TEST_VOICE else 'Silent mode (faster startup)'}")
     print("="*70)
     
-    # Cleanup duplicate processes
-    print("\n1. Cleaning up duplicate processes...")
+    # Acquire singleton lock (exits if another instance is alive)
+    print("\n1. Acquiring singleton lock...")
     cleanup_duplicate_processes()
-    print("[OK] Process cleanup completed")
+    print("[OK] Singleton lock acquired")
     
     # Cleanup old logs
     print("\n2. Cleaning up old log files...")

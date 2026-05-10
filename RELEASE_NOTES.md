@@ -4,7 +4,52 @@
 
 ---
 
-## v4.0.0 (2026-03-30) 🎉 最新版
+## v4.1.1 (2026-05-10) 🎉 最新版
+
+### 概要
+二重再生問題の根治。同時起動された場合の音声オーバーラップウィンドウを完全排除。
+
+### 主な変更点
+
+#### 🔒 **Race-free singleton lock** (cleanup_duplicate_processes)
+
+**旧実装の問題点 (v4.1 まで)**:
+- 起動時に PowerShell + WMI で他の kanon プロセスを検索 → `os.kill(pid, 9)` で強制終了
+- ライバル kill 完了までの数百 ms、複数プロセスが同時に音声を再生する race window が存在
+- Cong 報告: 「セッション開始時に音声が重複する」
+
+**新実装 (v4.1.1)**:
+- `~/.claude/kanon_aloud.pid` を atomic な singleton lock として使用
+- 起動時のフロー:
+  1. PID file を読む
+  2. 中の PID が生存中 (`tasklist`) かつ kanon プロセス (`wmic` でコマンドライン検証) なら → 自分が後発。即座に `sys.exit(0)`
+  3. 生存していない / kanon でない (PID 再利用) → stale lock 扱い、自分が claim
+- ヘルパー関数追加: `_is_pid_alive(pid)`、`_is_kanon_process(pid)`
+
+#### 🔧 PID 再利用対策
+`_is_kanon_process` で `wmic process where ProcessId=X get CommandLine` を呼んでコマンドラインに `kanon_aloud` または `claude_aivis_aloud` が含まれるかチェック。OS が PID を別プロセスに再割当した場合の誤判定を防止。
+
+### 動作確認
+- ✅ Claude Code CLI: 動作確認済み (v4.1 から継続)
+- ⚠️ **Claude Desktop: 未確認** — ユーザーによる動作確認が必要
+
+### アップグレード推奨度: ⭐⭐⭐⭐⭐
+v4.1 以下で「音声が重複する」現象を経験したユーザーには必須。
+
+---
+
+## v4.1 (2026-03-30)
+
+### 概要
+ツール実行の個別ナレーションと内部思考のクリーンサマリー追加。
+
+### 主な変更点
+- ツール実行ごとに具体的な日本語ナレーション (Bash / Read / Write / Edit / Glob / Grep / Agent 等)
+- 内部思考の自動英→日変換、パスやコード片を除去してサマリー化
+
+---
+
+## v4.0.0 (2026-03-30)
 
 ### 概要
 Claude Code Desktop対応・完全日本語音声ナレーション版。ツール実行・内部思考・ユーザー入力確認・許可通知をすべて自然な日本語で読み上げ。
