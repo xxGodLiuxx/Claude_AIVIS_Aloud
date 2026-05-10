@@ -4,10 +4,73 @@
 
 ---
 
-## v4.1.1 (2026-05-10) 🎉 最新版
+## v4.2.0 (2026-05-10) 🎉 最新版
 
 ### 概要
-二重再生問題の根治。同時起動された場合の音声オーバーラップウィンドウを完全排除。
+
+CLI モード向けの thinking 読み上げ companion (`claude_thinking_proxy.py`) を追加。Anthropic 上流仕様変更で機能停止した思考読み上げを、stream API レイヤから救出する補助実装。
+
+### 背景: 思考読み上げの機能停止
+
+[Anthropic Claude Code v2.1.72 (2026-03-10)](https://github.com/anthropics/claude-code/issues/32810) 以降、session JSONL 内の thinking ブロックは `signature` のみ保存され、`thinking` フィールドが空になった。`signature` は暗号化された署名で、ローカル環境では復号できない (Anthropic の課金/安全設計上の意図)。
+
+結果として、JSONL を監視する従来の daemon (`claude_aivis_aloud.py`) は thinking ブロックの存在を検出できても本文を取得できず、**v2.1.72+ の環境では「思考読み上げ」が事実上機能していない**。本セッション (2026-05-10、326 件の assistant message のうち 104 件が thinking) で確認した結果、**全 thinking 本文が空**だった。
+
+### 解決策: Stream-JSON Proxy
+
+Anthropic の SSE ストリーミング API では `thinking_delta` イベントが**平文で**配信されている (Claude API extended thinking spec)。`claude` CLI を `--output-format stream-json --include-partial-messages` で起動し、stdout を tap すれば thinking 本文を実時間で取り出せる。
+
+`claude_thinking_proxy.py` がそれを実装:
+
+```
+parent stdin   →  proxy stdin  →  claude stdin
+                                   |
+parent stdout  ←  proxy stdout ←  claude stdout (parse: thinking_delta)
+                                                |
+                                                → AIVIS /audio_query + /synthesis
+                                                → pygame.mixer playback (vol 0.1)
+```
+
+### 使用方法
+
+```bash
+# 通常の claude 呼び出しを置き換える
+python /path/to/claude_thinking_proxy.py -p "your prompt"
+
+# シェルでエイリアス化
+alias claude='python /path/to/claude_thinking_proxy.py'
+```
+
+### 動作モード
+
+- **--print / -p あり**: thinking_delta capture 有効。stream-json 出力に切り替わる
+- **--print なし (interactive)**: capture 無効、素通し (Anthropic CLI が `--include-partial-messages` を `--print` 必須としているため)
+
+### 制約
+
+| 項目 | 説明 |
+|---|---|
+| **CLI のみ** | Claude Desktop は `claude.exe` を絶対パスで spawn するため alias レベルで挟めない。Desktop 利用者は Anthropic の Issue #31143 解決待ち |
+| **Daemon 並列** | 既存 daemon と並走時、AIVIS は両方からの synthesis 要求を serialize するため短時間の音声重複可能性あり。thinking volume を 0.1 に絞って perceptual な dominance を text 側 (vol 0.3) に譲る設計 |
+| **interactive モード未対応** | `--print` なしの対話シェルでは thinking capture できない。Anthropic 仕様上の制約 |
+
+### 副次変更
+- 内部 banner ログ/プリント出力を v3.2.3 → v4.2.0 に同期 (v4.1 から残っていた整合性 mismatch 解消)
+
+### 動作確認
+
+- ✅ proxy spawn + stdout forwarding (smoke test): `python claude_thinking_proxy.py --version` で claude CLI を spawn、`1.0.110 (Claude Code)` を正しく forward 確認
+- ⚠️ live `thinking_delta` 平文受信: 本リポジトリでは subprocess auth context の制約により未検証。利用者の interactive session で要検証
+
+### アップグレード推奨度: ⭐⭐⭐⭐
+CLI ヘビーユーザには有用。Desktop 専用の利用者は v4.1.1 のままで OK (機能差分なし)。
+
+---
+
+## v4.1.1 (2026-05-10)
+
+### 概要
+二重再生問題の根治 (claude_aivis_aloud.py daemon の同時起動時)。同時起動された場合の音声オーバーラップウィンドウを完全排除。
 
 ### 主な変更点
 

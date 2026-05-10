@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude AIVIS Aloud v4.1.1
+Claude AIVIS Aloud v4.2.0
 Claude Code Desktop support with full Japanese narration
 - Tool use, thinking, user input confirmation in natural Japanese
 - Volume: Normal 0.3, Thinking/Tool 0.1
 - Subagent JSONL exclusion, 100+ term dictionary
+
 v4.1 (2026-03-30): Specific tool narration + clean thinking summaries
 v4.1.1 (2026-05-10): Race-free singleton lock — replaces "kill rivals"
-                     approach to eliminate the brief audio-overlap window
-                     before the rival process was terminated.
+                     approach to eliminate the brief audio-overlap window.
+v4.2.0 (2026-05-10): Banner version sync (v3.2.3 → v4.2.0). Add
+                     claude_thinking_proxy.py companion for CLI-mode
+                     thinking capture. Document the upstream Claude Code
+                     2.1.72+ thinking-text regression in JSONL (Issue
+                     #32810): the daemon's thinking detection still works
+                     defensively but the JSONL field is empty, so use the
+                     proxy for live thinking narration.
 Based on v3.2.3
 """
 
@@ -1139,7 +1146,7 @@ def monitor_and_speak():
     logger.info(f"[Monitor] Check interval: {CHECK_INTERVAL} seconds")
     logger.info(f"[Monitor] Auto session detection: ENABLED")
     logger.info("="*70)
-    logger.info("Claude AIVIS Aloud v3.2.3")
+    logger.info("Claude AIVIS Aloud v4.2.0")
     logger.info("Features:")
     logger.info("  - Simple FIFO queue (no priority system)")
     logger.info("  - No hook event processing")
@@ -1389,7 +1396,7 @@ def main():
     # Register cleanup function
     atexit.register(cleanup_at_exit)
     print("="*70)
-    print("Claude AIVIS Aloud v3.2.3")
+    print("Claude AIVIS Aloud v4.2.0")
     print("Optimized for fast startup and timeout prevention")
     print(f"Voice test: {'Enabled' if DEBUG_TEST_VOICE else 'Silent mode (faster startup)'}")
     print("="*70)

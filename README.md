@@ -2,14 +2,19 @@
 
 Claude Codeの応答メッセージをAIVIS Speech Engineでリアルタイム朗読するツール
 
-## 最新バージョン: v4.1.1 (2026-05-10)
+## 最新バージョン: v4.2.0 (2026-05-10)
 
-### v4.1.1 修正内容
-- 🔒 **二重再生問題の根治**: 旧「起動時にライバル kill」方式から **race-free singleton lock** へ置換。同時起動時、後発が PID file 経由で先発の生存を確認し、先発が kanon プロセスなら即座に exit。短時間の音声重複ウィンドウを排除。
+### v4.2.0 変更内容
+- 🆕 **`claude_thinking_proxy.py` 同梱** (CLI モード用 thinking 読み上げ companion)
+- 📝 **既知の制約を明記**: Anthropic Claude Code 2.1.72+ で session JSONL 内の thinking 本文が空 (`signature` のみ) になり、daemon 経由の思考読み上げは事実上機能停止 ([Issue #32810](https://github.com/anthropics/claude-code/issues/32810))。CLI 利用者は新 proxy を使用、Desktop 利用者は Anthropic 修正待ち
+- 🔧 banner version sync (内部ログ/プリント出力 v3.2.3 → v4.2.0)
+
+### v4.1.1 (2026-05-10)
+- 🔒 **二重再生問題の根治**: 旧「起動時にライバル kill」方式から **race-free singleton lock** へ置換
 
 ### v4.1 (2026-03-30) の主な特徴
 - ツール実行ごとの個別ナレーション (例:「パイソンファイルを編集します」)
-- 内部思考のクリーンサマリー (英語思考 → 自然な日本語)
+- 内部思考のクリーンサマリー (英語思考 → 自然な日本語) ※ JSONL からは v2.1.72 以降取得不可、proxy 経由を推奨
 
 ### v4.0.0 (2026-03-30) の主な特徴
 - 🖥️ Claude Code Desktop完全対応
